@@ -135,7 +135,7 @@ def iterate_files(directory, filetype):
 					tree.write(full_save_name, encoding='UTF-8', xml_declaration=True)  # writes tree to file
 					ET.dump(tree)  # shows tree in console
 					print('\n\n')
-					print(paragraph_list)
+					# print(paragraph_list)
 
 
 
