@@ -47,7 +47,7 @@ def remove_hyphens_at_linebreaks(text) -> List[str]:
 		line = line.strip(' ')
 		if line.endswith('-') and lines[i+1] != '' and lines[i + 1][0].islower():
 			text_wo_hyphens.append(lines[i][:-1])
-		elif line.endswith('-') and lines[i+1] == '' and lines[i + 2][0].islower():  # if word is split up at page break
+		elif line.endswith('-') and lines[i+1] == '' and lines[i+2] != '' and lines[i + 2][0].islower():  # if word is split up at page break
 			text_wo_hyphens.append(lines[i][:-1])  # if word is split up at page break
 			del lines[i+1]  # if word is split up at page break
 		elif line.endswith('vgl.') and lines[i+1] == '':  # if word is split up at page break
@@ -56,7 +56,8 @@ def remove_hyphens_at_linebreaks(text) -> List[str]:
 		elif line != '' and line[-1].isalpha() and lines[i+1] == '':  # if sentence is split up at page break
 			text_wo_hyphens.append(lines[i] + ' ')  # if sentence is split up at page break
 			del lines[i+1]  # if sentence is split up at page break
-		elif line != '' and lines[i+1] != '' and re.match(r'[0-9][0-9]?\.$', line) and re.match(r'^(Januar|Februar|März|April|Mai|Juni|Juli|August|September'
+		elif line != '' and 0 <= i+1 < len(lines) and re.match(r'[0-9][0-9]?\.$', line) \
+												and lines[i+1] != '' and re.match(r'^(Januar|Februar|März|April|Mai|Juni|Juli|August|September'
 															 r'|Oktober|November|Dezember)', lines[i+1]):
 			text_wo_hyphens.append(lines[i] + ' ' + lines[i+1] + ' ')
 			del lines[i+1]
@@ -109,8 +110,14 @@ def get_pages(parsed_html) -> str:
 	return pages[0] + '-' + pages[-1]
 
 
+def get_title(parsed_html) -> str:
+	for tag in parsed_html.findAll('span'):
+		if 'title' in tag['class']:
+			return tag.text
+
+
 def iterate_files(directory, filetype):
-	for filename in sorted(os.listdir(directory)):  # functions theoretically until AG_HG files start
+	for filename in sorted(os.listdir(directory))[16305:]:
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + '.json')
@@ -121,6 +128,7 @@ def iterate_files(directory, filetype):
 				with open(fname_json, 'r', encoding='utf-8') as json_file:
 					loaded_json = json.load(json_file)
 					beautifulSoupText = BeautifulSoup(file.read(), 'html.parser')
+					print(beautifulSoupText)
 					text = parse_text(beautifulSoupText)
 					text_wo_hyphens = remove_hyphens_at_linebreaks(text)
 					paragraph_list = get_paragraphs(text_wo_hyphens)
@@ -132,10 +140,16 @@ def iterate_files(directory, filetype):
 					text_node = ET.Element('text')
 					text_node.attrib['id'] = filename[:-5]
 					text_node.attrib['author'] = ''
-					text_node.attrib['title'] = loaded_json['Kopfzeile'][0]['Text']
+					if 'Kopfzeile' in loaded_json.keys():
+						text_node.attrib['title'] = loaded_json['Kopfzeile'][0]['Text']
+					else:
+						text_node.attrib['title'] = get_title(beautifulSoupText)
 					text_node.attrib['source'] = 'https://entscheidsuche.ch'  # ?
 					text_node.attrib['page'] = get_pages(beautifulSoupText)
-					text_node.attrib['topics'] = loaded_json['Meta'][3]['Text']
+					if 'Meta' in loaded_json.keys():
+						text_node.attrib['topics'] = loaded_json['Meta'][3]['Text']
+					else:
+						text_node.attrib['topics'] = ''
 					text_node.attrib['subtopics'] = ''
 					text_node.attrib['language'] = loaded_json['Sprache']
 					text_node.attrib['date'] = loaded_json['Datum']
