@@ -18,11 +18,11 @@ parser.add_argument('-t','--type',type=str, default=".html", help="default filet
 
 args = parser.parse_args()
 
-ALLOWED_CLASSES = ["ft1","ft4","ft3","ft5", 'ft6', 'ft7', 'text']
+ALLOWED_CLASSES = ["ft1","ft4","ft3","ft5", 'ft6', 'ft7', 'text', 'ft2', 'ft8', 'ft9']
 
 PATH_TO_DATA = args.path_to_data
 
-SAVE_PATH = '/home/admin1/tb_tool/clean_scraper_data/'
+SAVE_PATH = '/home/admin1/tb_tool/clean_scraper_data/AG_Gerichte_clean/'
 
 absatz_pattern = r'^[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?'
 datum_pattern = r'[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}'
@@ -53,12 +53,15 @@ def remove_hyphens_at_linebreaks(text) -> List[str]:
 		elif line.endswith('vgl.') and lines[i+1] == '':  # if word is split up at page break
 			text_wo_hyphens.append(lines[i] + ' ')  # if word is split up at page break
 			del lines[i+1]  # if word is split up at page break
+		elif line.endswith('Ziff.') and lines[i+1][0].isnumeric():
+			text_wo_hyphens.append(line + ' ' + lines[i+1])
+			del lines[i+1]
 		elif line != '' and line[-1].isalpha() and lines[i+1] == '':  # if sentence is split up at page break
 			text_wo_hyphens.append(lines[i] + ' ')  # if sentence is split up at page break
 			del lines[i+1]  # if sentence is split up at page break
-		elif line != '' and 0 <= i+1 < len(lines) and re.match(r'[0-9][0-9]?\.$', line) \
-												and lines[i+1] != '' and re.match(r'^(Januar|Februar|März|April|Mai|Juni|Juli|August|September'
-															 r'|Oktober|November|Dezember)', lines[i+1]):
+		elif line != '' and 0 <= i+1 < len(lines) and re.match(r'[0-9][0-9]?\.$', line) and lines[i+1] != '' \
+						and re.match(r'^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)',
+									 lines[i+1]):  # for dates that are split up otherwise
 			text_wo_hyphens.append(lines[i] + ' ' + lines[i+1] + ' ')
 			del lines[i+1]
 		elif line == lines[-1]:
@@ -74,7 +77,7 @@ def get_paragraphs(text_wo_hyphens) -> List[str]:
 	for i, element in enumerate(text_wo_hyphens):
 		if element != '' and element[0].isalpha():
 			para += element
-		elif element != '' and element[0] == '(':  # because all lines starting with '(' are skipped otherwise
+		elif element != '' and element[0] in '()""§-–[]{}.·':  # because all lines starting with these chars are skipped otherwise
 			para += element
 		elif element != '' and re.match(datum_pattern, element):
 			para += element
@@ -117,18 +120,18 @@ def get_title(parsed_html) -> str:
 
 
 def iterate_files(directory, filetype):
-	for filename in sorted(os.listdir(directory))[16305:]:
+	for filename in sorted(os.listdir(directory)):
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + '.json')
 			xml_filename = filename[:-5] + '.xml'
 			full_save_name = os.path.join(SAVE_PATH, xml_filename)
 			print("Current file name: ", os.path.abspath(fname), 'will be converted into ', xml_filename)
+			print('\n')
 			with open(fname, 'r') as file:
 				with open(fname_json, 'r', encoding='utf-8') as json_file:
 					loaded_json = json.load(json_file)
 					beautifulSoupText = BeautifulSoup(file.read(), 'html.parser')
-					print(beautifulSoupText)
 					text = parse_text(beautifulSoupText)
 					text_wo_hyphens = remove_hyphens_at_linebreaks(text)
 					paragraph_list = get_paragraphs(text_wo_hyphens)
@@ -165,8 +168,10 @@ def iterate_files(directory, filetype):
 
 					body_node = ET.SubElement(text_node, 'body')
 					for para in filtered_paragraph_list:
+						if para.startswith(' '): # so that random whitespaces in the beginning of paragraphs are deleted
+							para = para[1:]
 						p_node = ET.SubElement(body_node, 'p')
-						if re.search(absatz_pattern, para):  # continue trying this or split numbers in later AK files before
+						if re.search(absatz_pattern, para):
 							p_node.attrib['type'] = 'Absatznummer'
 						else:
 							p_node.attrib['type'] = 'plain text'
@@ -179,9 +184,6 @@ def iterate_files(directory, filetype):
 					tree.write(full_save_name, encoding='UTF-8', xml_declaration=True)  # writes tree to file
 					ET.dump(tree)  # shows tree in console
 					print('\n\n')
-
-
-
 
 
 def main():
