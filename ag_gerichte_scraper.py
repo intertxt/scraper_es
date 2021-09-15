@@ -120,7 +120,7 @@ def get_title(parsed_html) -> str:
 
 
 def iterate_files(directory, filetype):
-	for filename in sorted(os.listdir(directory)):
+	for filename in sorted(os.listdir(directory))[:10]:  #remove indexing when script is ready for all files
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + '.json')
@@ -172,9 +172,9 @@ def iterate_files(directory, filetype):
 							para = para[1:]
 						p_node = ET.SubElement(body_node, 'p')
 						if re.search(absatz_pattern, para):
-							p_node.attrib['type'] = 'Absatznummer'
+							p_node.attrib['type'] = 'paragraph_mark'
 						else:
-							p_node.attrib['type'] = 'plain text'
+							p_node.attrib['type'] = 'plain_text'
 						p_node.text = para
 					# pb_node = ET.SubElement(body_node, 'pb') # drinlassen?
 					# footnote_node = ET.SubElement(text_node, 'footnote') # drinlassen?
