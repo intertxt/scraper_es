@@ -18,7 +18,7 @@ parser.add_argument('-t','--type',type=str, default=".html", help="default filet
 
 args = parser.parse_args()
 
-ALLOWED_CLASSES = ["ft1","ft4","ft3","ft5", 'ft6', 'ft7', 'text', 'ft2', 'ft8', 'ft9']
+ALLOWED_CLASSES = ["ft1","ft4","ft3","ft5", 'ft6', 'ft7', 'text', 'ft2', 'ft8', 'ft9', 'ft10']
 
 PATH_TO_DATA = args.path_to_data
 
@@ -45,29 +45,43 @@ def remove_hyphens_at_linebreaks(text) -> List[str]:
 	lines = text.split('  ')
 	for i, line in enumerate(lines):
 		line = line.strip(' ')
-		if line.endswith('-') and lines[i+1] != '' and lines[i + 1][0].islower():
+		if line.endswith('-') and lines[i + 1] != '' and lines[i + 1][0].islower():
 			text_wo_hyphens.append(lines[i][:-1])
-		elif line.endswith('-') and lines[i+1] == '' and lines[i+2] != '' and lines[i + 2][0].islower():  # if word is split up at page break
+		elif line.endswith('-') and lines[i+1] != '' and lines[i + 1][0].isnumeric():
+			text_wo_hyphens.append(lines[i]+ ' ' + lines[i+1])
+		elif line.endswith('-') and lines[i + 1] == '' and lines[i + 2] != '' and lines[i + 2][0].islower():  # if word is split up at page break
 			text_wo_hyphens.append(lines[i][:-1])  # if word is split up at page break
-			del lines[i+1]  # if word is split up at page break
-		elif line.endswith('vgl.') and lines[i+1] == '':  # if word is split up at page break
+			del lines[i + 1]  # if word is split up at page break
+		elif line.endswith('vgl.') and lines[i + 1] == '':  # if word is split up at page break
 			text_wo_hyphens.append(lines[i] + ' ')  # if word is split up at page break
-			del lines[i+1]  # if word is split up at page break
-		elif line.endswith('Ziff.') and lines[i+1][0].isnumeric():
-			text_wo_hyphens.append(line + ' ' + lines[i+1])
-			del lines[i+1]
-		elif line != '' and line[-1].isalpha() and lines[i+1] == '':  # if sentence is split up at page break
+			del lines[i + 1]  # if word is split up at page break
+		elif line.endswith('Ziff.') and lines[i + 1][0].isnumeric():
+			text_wo_hyphens.append(line + ' ' + lines[i + 1])
+			del lines[i + 1]
+		elif line != '' and line[-1].isalpha() and lines[i + 1] == '':  # if sentence is split up at page break
 			text_wo_hyphens.append(lines[i] + ' ')  # if sentence is split up at page break
-			del lines[i+1]  # if sentence is split up at page break
-		elif line != '' and 0 <= i+1 < len(lines) and re.match(r'[0-9][0-9]?\.$', line) and lines[i+1] != '' \
-						and re.match(r'^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)',
-									 lines[i+1]):  # for dates that are split up otherwise
-			text_wo_hyphens.append(lines[i] + ' ' + lines[i+1] + ' ')
+			del lines[i + 1]  # if sentence is split up at page break
+		elif line != '' and 0 <= i + 1 < len(lines) and re.match(r'[0-9][0-9]?\.$', line) and lines[i + 1] != '' \
+				and re.match(r'^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)',
+							 lines[i + 1]):  # for dates that are split up otherwise
+			text_wo_hyphens.append(lines[i] + ' ' + lines[i + 1] + ' ')
+			del lines[i + 1]
+		elif line.endswith('-') and lines[i+1] == '' and lines[i + 2].startswith('KABA'):
+			text_wo_hyphens.append(lines[i][:-1])
+			del lines[i + 1]
+		elif line.endswith('-') and lines[i+1] == '' and lines[i + 2].startswith('WAL'):
+			text_wo_hyphens.append(lines[i][:-1])
+			del lines[i + 1]
+		elif line.endswith('-') and lines[i+1] == '' and lines[i + 2][0].isnumeric():
+			text_wo_hyphens.append(lines[i]+ ' ' + lines[i+2])
 			del lines[i+1]
+			del lines[i+2]
 		elif line == lines[-1]:
 			text_wo_hyphens.append(line)
 		else:
-			text_wo_hyphens.append(line+' ')
+			text_wo_hyphens.append(line + ' ')
+
+
 	return text_wo_hyphens
 
 
@@ -77,19 +91,25 @@ def get_paragraphs(text_wo_hyphens) -> List[str]:
 	for i, element in enumerate(text_wo_hyphens):
 		if element != '' and element[0].isalpha():
 			para += element
-		elif element != '' and element[0] in '()""§-–[]{}.·':  # because all lines starting with these chars are skipped otherwise
+		elif element != '' and element[0] in '+/()""§-–[]{}.·':  # because all lines starting with these chars are skipped otherwise
 			para += element
 		elif element != '' and re.match(datum_pattern, element):
 			para += element
 		elif element != '' and re.match(r'[0-9][0-9]?\. Auflage', element):
 			para += element
 		elif element != '' and re.match(absatz_pattern, element):
-			match = re.search(absatz_pattern, element).group(0)
+			match = re.match(absatz_pattern, element).group(0)
+			# add rule so that random decimal numbers at the beginning of lines are not falsely recognized as paragraph marks
+			# if text_wo_hyphens[i-1] == '' \
+			# 		or len(text_wo_hyphens[i-1]) >= 2 and text_wo_hyphens[i-1][-2] not in '.)}]/"' :
+			# 		# or len(text_wo_hyphens[i-1]) >= 1 and text_wo_hyphens[i-1][-1] not in '.)}]/"':
 			if element.startswith(match) and element.endswith(match):
 				paragraph_list.append(para[:-1])
 				para = ''
 				paragraph_list.append(element[:-1])
 			elif re.match(r'[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s?', element):
+				para += element
+			elif para.startswith(match+')'):
 				para += element
 			else:
 				paragraph_list.append(para[:-1])
@@ -120,7 +140,7 @@ def get_title(parsed_html) -> str:
 
 
 def iterate_files(directory, filetype):
-	for filename in sorted(os.listdir(directory))[:10]:  #remove indexing when script is ready for all files
+	for filename in sorted(os.listdir(directory)):  #remove indexing when script is ready for all files
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + '.json')
@@ -134,6 +154,7 @@ def iterate_files(directory, filetype):
 					beautifulSoupText = BeautifulSoup(file.read(), 'html.parser')
 					text = parse_text(beautifulSoupText)
 					text_wo_hyphens = remove_hyphens_at_linebreaks(text)
+					# print(text_wo_hyphens)
 					paragraph_list = get_paragraphs(text_wo_hyphens)
 					filter_list = filter(lambda x: x != "", paragraph_list)  # removes empty list elements
 					filtered_paragraph_list = list(filter_list)  # removes empty list elements
@@ -171,7 +192,7 @@ def iterate_files(directory, filetype):
 						if para.startswith(' '): # so that random whitespaces in the beginning of paragraphs are deleted
 							para = para[1:]
 						p_node = ET.SubElement(body_node, 'p')
-						if re.search(absatz_pattern, para):
+						if re.match(absatz_pattern, para):
 							p_node.attrib['type'] = 'paragraph_mark'
 						else:
 							p_node.attrib['type'] = 'plain_text'

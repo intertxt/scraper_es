@@ -24,13 +24,16 @@ PATH_TO_DATA = args.path_to_data
 SAVE_PATH = '/home/admin1/tb_tool/clean_scraper_data/BL_Gerichte_clean/'
 
 absatz_pattern = r'^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?'
+absatz_pattern2 = r'^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?'
 datum_pattern = r'[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}'
 
+false_marks = ['272.8', '268.1', '480.00', '998.67', '442.50', '365.00']
 
-def parse_text(parsed_html) -> List[str]:
+
+def parse_text(parsed_html, filename) -> List[str]:
 	"""Get text out of HTML-files."""
-	invalid_tags = ['sup']
 	text = []
+	invalid_tags = ['sup', 'br']
 	if parsed_html.findAll(['p']):
 		for tag in parsed_html.findAll(["p", 'td', 'strong']):
 			for child in tag.findAll(invalid_tags):
@@ -40,13 +43,29 @@ def parse_text(parsed_html) -> List[str]:
 			tag_text = tag_text.strip('\n')
 			text.append(tag_text)
 	else:
-		for tag in parsed_html.findAll(['div']):
-			for child in tag.findAll(invalid_tags):
+		text_str = ''
+		for tag in parsed_html.findAll(['div', 'br']):
+			for child in tag.findAll([invalid_tags]):
 				child.decompose()
-			tag_text = unicodedata.normalize('NFKD', tag.get_text()).strip('\n        ').replace('\n         \n         ', ' ')
-			tag_text = tag_text.strip(' ')
-			tag_text = tag_text.strip('\n')
-			text.append(tag_text)
+			tag_text = unicodedata.normalize('NFKD', tag.get_text()).strip('\n        ').replace(
+				'\n         \n         ', ' ')
+			tag_text = tag_text.strip()
+			text_str = text_str + tag_text
+			text_str = text_str.replace('\n\n', '\n')
+			text = text_str.split('\n')
+			filter_list = list(filter(lambda x: x != "", text))
+			filter_list = list(filter(lambda x: x != " ", filter_list))
+			filter_list = list(filter(lambda x: x != "   ", filter_list))
+			filter_list = list(filter(lambda x: x != "    ", filter_list))
+			filter_list = list(filter(lambda x: x != "", filter_list))
+			text = list(filter_list)
+		# for tag in parsed_html.findAll(['div']):
+		# 	for child in tag.findAll(invalid_tags):
+		# 		child.decompose()
+		# 	tag_text = unicodedata.normalize('NFKD', tag.get_text()).strip('\n        ').replace('\n         \n         ', ' ')
+		# 	tag_text = tag_text.strip(' ')
+		# 	tag_text = tag_text.strip('\n')
+		# 	text.append(tag_text)
 	return text
 
 
@@ -54,19 +73,11 @@ def remove_hyphens(old_text) -> List[str]:
 	"""Removes hyphens and merge elements."""
 	text_wo_hyphens = []
 	for i, para in enumerate(old_text):
-		para = para.replace('        ', ' ')
-		para = para.replace('       ', ' ')
-		para = para.replace('      ', ' ')
-		para = para.replace('     ', ' ')
-		para = para.replace('    ', ' ')
-		para = para.replace('   ', ' ')
-		para = para.replace('  ', ' ')
-		para = para.replace('\n\n\n\n', ' ')
-		para = para.replace('\n\n\n', ' ')
-		para = para.replace('\n\n', ' ')
 		para = para.replace('\n', ' ')
-		if para.endswith('-') and old_text[i+1][0].islower:
-			text_wo_hyphens.append(para[:-1]+old_text[i+1])
+		para = para.replace('  ', '')
+		para = para.replace('   ', '')
+		if para.endswith('-') and not para.endswith('--') and old_text[i+1][0].islower:
+			text_wo_hyphens.append(para[:-1]+old_text[i+1].replace('\n              ', ' ').replace('\n             \n             ', ' ').replace('  ', ''))
 			del old_text[i+1]
 		else:
 			text_wo_hyphens.append(para)
@@ -77,12 +88,16 @@ def remove_page_breaks(text_wo_hyphens) -> List[str]:
 	""""Remove page breaks and merge elements."""
 	clean_text_list = []
 	for i, element in enumerate(text_wo_hyphens):
-		if i+1 < len(text_wo_hyphens) and text_wo_hyphens[i+1][0].islower():
+		listing_pattern = r'[a-z]\)\s?'
+		if i+1 < len(text_wo_hyphens) and text_wo_hyphens[i+1][0].islower() and not re.match(listing_pattern, text_wo_hyphens[i+1]):
 			clean_text_list.append(element + ' ' + text_wo_hyphens[i+1])
 			del text_wo_hyphens[i+1]
 		elif i+1 < len(text_wo_hyphens) and text_wo_hyphens[i+1].startswith('X.-Weg'):
 			clean_text_list.append(element + ' ' + text_wo_hyphens[i+1])
 			del text_wo_hyphens[i+1]
+		elif element[-1] == '=':
+			clean_text_list.append(element + ' ' + text_wo_hyphens[i + 1])
+			del text_wo_hyphens[i + 1]
 		else:
 			clean_text_list.append(element)
 	return clean_text_list
@@ -92,17 +107,36 @@ def split_absatznr(text_list) -> List[str]:
 	"""Split 'Absatznummern' from rest of the text."""
 	paragraph_list = []
 	for i, element in enumerate(text_list):
-		if re.search(absatz_pattern, element):
-			match = re.search(absatz_pattern, element).group(0)
-			if re.fullmatch(absatz_pattern, element):
+		if element == 'Fr.' and re.match(absatz_pattern, text_list[i+1]):
+			paragraph_list.append(element+' '+text_list[i+1])
+			del text_list[i+1]
+		elif re.search(absatz_pattern2, element):
+			match2 = re.search(absatz_pattern2, element).group(0)
+			if element.startswith(match2):
+				paragraph_list.append(match2)
+				paragraph_list.append(element.lstrip(match2))
+			elif element == match2:
 				paragraph_list.append(element)
-			elif element.startswith(match):
+			elif element.startswith('(...)'):
+				paragraph_list.append('(...)')
+				paragraph_list.append(match2)
+				paragraph_list.append(element.lstrip('(...)'+match2))
+			else:
+				paragraph_list.append(element)
+		elif re.search(absatz_pattern, element):
+			match = re.search(absatz_pattern, element).group(0)
+			if element.startswith(match) and text_list[i+1] == 'Mietzins':
+				paragraph_list.append(element + ' ' + text_list[i + 1])
+				del text_list[i + 1]
+			elif element.startswith(match) and not element.startswith(match+'-'):
 				paragraph_list.append(match)
 				paragraph_list.append(element.lstrip(match))
 			elif element.startswith('(...)'):
 				paragraph_list.append('(...)')
 				paragraph_list.append(match)
 				paragraph_list.append(element.lstrip('(...)'+match))
+			elif element == match:
+				paragraph_list.append(element)
 			else:
 				paragraph_list.append(element)
 		else:
@@ -124,7 +158,7 @@ def iterate_files(directory, filetype):
 					loaded_json = json.load(json_file)  #load json
 					beautifulSoupText = BeautifulSoup(file.read(), 'html.parser')  #read html
 					# print(beautifulSoupText)
-					text = parse_text(beautifulSoupText)
+					text = parse_text(beautifulSoupText, filename[:-5])
 					# print(text)
 					filter_list = filter(lambda x: x != "", text)  # removes empty list elements
 					filtered_paragraph_list = list(filter_list)
@@ -132,7 +166,9 @@ def iterate_files(directory, filetype):
 					# print(text_wo_hyphens)
 					# print('\n')
 					clean_text_list = remove_page_breaks(text_wo_hyphens)
+					# print('\n')
 					# print(clean_text_list)
+					# print('\n')
 					paragraph_list = split_absatznr(clean_text_list)
 
 					# building the xml tree
@@ -151,14 +187,19 @@ def iterate_files(directory, filetype):
 					else:
 						text_node.attrib['topics'] = ''
 					text_node.attrib['subtopics'] = ''
-					text_node.attrib['language'] = loaded_json['Sprache']
+					if 'Sprache' in loaded_json.keys():
+						text_node.attrib['language'] = loaded_json['Sprache']
+					else:
+						text_node.attrib['language'] = loaded_json['Kopfzeile'][0]['Sprachen']
 					text_node.attrib['date'] = loaded_json['Datum']
 					text_node.attrib['description'] = loaded_json['Abstract'][0]['Text']
 					text_node.attrib['type'] = loaded_json['Signatur']
 					text_node.attrib['file'] = filename
 					text_node.attrib['year'] = loaded_json['Datum'][:4]
 					text_node.attrib['decade'] = loaded_json['Datum'][:3]+'0'
-					text_node.attrib['url'] = loaded_json['HTML']['URL']
+					if 'HTML' in loaded_json.keys():
+						text_node.attrib['url'] = loaded_json['HTML']['URL']
+
 
 					# body node with paragraph nodes
 					# header_node = ET.SubElement(text_node, 'header') # drinlassen?
@@ -168,7 +209,9 @@ def iterate_files(directory, filetype):
 						if para.startswith(' '): # so that random whitespaces in the beginning of paragraphs are deleted
 							para = para[1:]
 						p_node = ET.SubElement(body_node, 'p')
-						if re.search(absatz_pattern, para):
+						if para in false_marks:
+							p_node.attrib['type'] = 'plain_text'
+						elif re.fullmatch(absatz_pattern, para): # changed to fullmatch seemed better
 							p_node.attrib['type'] = 'paragraph_mark'
 						else:
 							p_node.attrib['type'] = 'plain_text'
