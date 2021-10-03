@@ -9,6 +9,8 @@ from typing import List
 import xml.etree.ElementTree as ET
 import json
 import re
+import unicodedata
+
 
 
 parser = argparse.ArgumentParser(description='extract text from entscheidsuche.ch')
@@ -25,7 +27,10 @@ PATH_TO_DATA = args.path_to_data
 SAVE_PATH = '/home/admin1/tb_tool/clean_scraper_data/AG_Gerichte_clean/'
 
 absatz_pattern = r'^[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?'
+absatz_pattern2 = r'^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s?-\s?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?'
 datum_pattern = r'[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}'
+title_names = ['Aus den Erwägungen', 'Sachverhalt']
+art_structure = r"\d{1,3}\s?Art\.\s?\d{1,3}\s?"
 
 
 def parse_text(parsed_html) -> str:
@@ -80,8 +85,6 @@ def remove_hyphens_at_linebreaks(text) -> List[str]:
 			text_wo_hyphens.append(line)
 		else:
 			text_wo_hyphens.append(line + ' ')
-
-
 	return text_wo_hyphens
 
 
@@ -89,7 +92,11 @@ def get_paragraphs(text_wo_hyphens) -> List[str]:
 	paragraph_list = []
 	para = ''
 	for i, element in enumerate(text_wo_hyphens):
-		if element != '' and element[0].isalpha():
+		if element.startswith('Sachverhalt') or element.startswith('Aus den Erwägungen'):
+			paragraph_list.append(element[:-1])
+		elif re.match(art_structure, element):
+			paragraph_list.append(element[:-1])
+		elif element != '' and element[0].isalpha():
 			para += element
 		elif element != '' and element[0] in '+/()""§-–[]{}.·':  # because all lines starting with these chars are skipped otherwise
 			para += element
@@ -97,12 +104,8 @@ def get_paragraphs(text_wo_hyphens) -> List[str]:
 			para += element
 		elif element != '' and re.match(r'[0-9][0-9]?\. Auflage', element):
 			para += element
-		elif element != '' and re.match(absatz_pattern, element):
-			match = re.match(absatz_pattern, element).group(0)
-			# add rule so that random decimal numbers at the beginning of lines are not falsely recognized as paragraph marks
-			# if text_wo_hyphens[i-1] == '' \
-			# 		or len(text_wo_hyphens[i-1]) >= 2 and text_wo_hyphens[i-1][-2] not in '.)}]/"' :
-			# 		# or len(text_wo_hyphens[i-1]) >= 1 and text_wo_hyphens[i-1][-1] not in '.)}]/"':
+		elif element != '' and re.search(absatz_pattern2, element):
+			match = re.search(absatz_pattern2, element).group(0)
 			if element.startswith(match) and element.endswith(match):
 				paragraph_list.append(para[:-1])
 				para = ''
@@ -110,6 +113,22 @@ def get_paragraphs(text_wo_hyphens) -> List[str]:
 			elif re.match(r'[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s?', element):
 				para += element
 			elif para.startswith(match+')'):
+				para += element
+			else:
+				paragraph_list.append(para[:-1])
+				para = ''
+				paragraph_list.append(match)
+				element = element.replace(match, '')
+				para += element
+		elif element != '' and re.match(absatz_pattern, element):
+			match = re.match(absatz_pattern, element).group(0)
+			if element.startswith(match) and element.endswith(match):
+				paragraph_list.append(para[:-1])
+				para = ''
+				paragraph_list.append(element[:-1])
+			elif re.match(r'[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s?', element):
+				para += element
+			elif element.startswith(match+')'):
 				para += element
 			else:
 				paragraph_list.append(para[:-1])
@@ -154,7 +173,7 @@ def iterate_files(directory, filetype):
 					beautifulSoupText = BeautifulSoup(file.read(), 'html.parser')
 					text = parse_text(beautifulSoupText)
 					text_wo_hyphens = remove_hyphens_at_linebreaks(text)
-					# print(text_wo_hyphens)
+					print(text_wo_hyphens)
 					paragraph_list = get_paragraphs(text_wo_hyphens)
 					filter_list = filter(lambda x: x != "", paragraph_list)  # removes empty list elements
 					filtered_paragraph_list = list(filter_list)  # removes empty list elements
