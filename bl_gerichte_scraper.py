@@ -104,7 +104,7 @@ def remove_page_breaks(text_wo_hyphens) -> List[str]:
 
 
 def split_absatznr(text_list) -> List[str]:
-	"""Split 'Absatznummern' from rest of the text."""
+	"""Split 'paragraph_mark' from rest of the text."""
 	paragraph_list = []
 	for i, element in enumerate(text_list):
 		if element == 'Fr.' and re.match(absatz_pattern, text_list[i+1]):
