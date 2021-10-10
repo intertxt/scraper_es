@@ -98,6 +98,64 @@ def get_pages(parsed_html) -> str:
 # 	return paragraph_list
 
 
+def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name):
+	"""Build an XML-tree."""
+	text_node = ET.Element("text")
+	text_node.attrib["id"] = filename[:-5]
+	text_node.attrib["author"] = ""
+	if "Kopfzeile" in loaded_json.keys():
+		text_node.attrib["title"] = loaded_json["Kopfzeile"][0]["Text"].replace('  ', ' ')
+	text_node.attrib["source"] = "https://entscheidsuche.ch"
+	if "Seiten" in loaded_json.keys():
+		text_node.attrib["page"] = loaded_json["Seiten"].replace('  ', ' ')
+	else:
+		text_node.attrib["page"] = pages
+	if "Meta" in loaded_json.keys():
+		text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"]
+	else:
+		text_node.attrib["topics"] = ""
+	text_node.attrib["subtopics"] = ""
+	if "Sprache" in loaded_json.keys():
+		text_node.attrib["language"] = loaded_json["Sprache"].replace('  ', ' ')
+	else:
+		text_node.attrib["language"] = loaded_json["Kopfzeile"][0]["Sprachen"].replace('  ', ' ')
+	if filename.endswith("nodate.html"):
+		text_node.attrib["date"] = "0000-00-00"
+	else:
+		text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
+	text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"][12:]
+	text_node.attrib["type"] = loaded_json["Signatur"].replace('  ', ' ')
+	text_node.attrib["file"] = filename
+	if filename.endswith("nodate.html"):
+		text_node.attrib["year"] = "0000"
+	else:
+		text_node.attrib["year"] = loaded_json["Datum"][:4]
+	if filename.endswith("nodate.html"):
+		text_node.attrib["decade"] = "0000-00-00"
+	else:
+		text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
+	if "HTML" in loaded_json.keys():
+		text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
+	# body node with paragraph nodes
+	# header_node = ET.SubElement(text_node, "header") # drinlassen?
+	body_node = ET.SubElement(text_node, "body")
+	for para in filter_list:
+		if para.startswith(" "):  # so that random whitespaces in the beginning of paragraphs are deleted
+			para = para[1:]
+		p_node = ET.SubElement(body_node, "p")
+		if para in false_marks:
+			p_node.attrib["type"] = "plain_text"
+		elif re.fullmatch(absatz_pattern, para):  # changed to fullmatch seemed better
+			p_node.attrib["type"] = "paragraph_mark"
+		else:
+			p_node.attrib["type"] = "plain_text"
+		p_node.text = para
+	# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
+	# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
+	tree = ET.ElementTree(text_node) # creating the tree
+	return tree
+
+
 def iterate_files(directory, filetype):
 	fname_list = []
 	for filename in sorted(os.listdir(directory)):
@@ -122,62 +180,9 @@ def iterate_files(directory, filetype):
 					# print("\n")
 					filter_list = list(filter(lambda x: x != "", text))
 					text = list(filter_list)
-					print(filter_list)
-
-					# building the xml tree
-					# text node with attributes
-					text_node = ET.Element("text")
-					text_node.attrib["id"] = filename[:-5]
-					text_node.attrib["author"] = ""
-					if "Kopfzeile" in loaded_json.keys():
-						text_node.attrib["title"] = loaded_json["Kopfzeile"][0]["Text"].replace('  ', ' ')
-					else:
-						text_node.attrib["title"] = get_title(beautifulSoupText)
-					text_node.attrib["source"] = "https://entscheidsuche.ch"  # ?
-					if "Seiten" in loaded_json.keys():
-						text_node.attrib["page"] = loaded_json["Seiten"].replace('  ', ' ')
-					else:
-						text_node.attrib["page"] = get_pages(beautifulSoupText)
-					if "Meta" in loaded_json.keys():
-						text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"].replace('  ', ' ').strip()
-					else:
-						text_node.attrib["topics"] = ""
-					text_node.attrib["subtopics"] = ""
-					if "Sprache" in loaded_json.keys():
-						text_node.attrib["language"] = loaded_json["Sprache"].replace('  ', ' ')
-					else:
-						text_node.attrib["language"] = loaded_json["Kopfzeile"][0]["Sprachen"].replace('  ', ' ')
-					if filename.endswith("nodate.html"):
-						text_node.attrib["date"] = "0000-00-00"
-					else:
-						text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
-					text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"].replace('  ', ' ')
-					text_node.attrib["type"] = loaded_json["Signatur"].replace('  ', ' ')
-					text_node.attrib["file"] = filename
-					text_node.attrib["year"] = loaded_json["Datum"][:4]
-					text_node.attrib["decade"] = loaded_json["Datum"][:3]+"0"
-					if "HTML" in loaded_json.keys():
-						text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
-
-					# body node with paragraph nodes
-					# header_node = ET.SubElement(text_node, "header") # drinlassen?
-					body_node = ET.SubElement(text_node, "body")
-					for para in filter_list:
-						if para.startswith(" "): # so that random whitespaces in the beginning of paragraphs are deleted
-							para = para[1:]
-						p_node = ET.SubElement(body_node, "p")
-						if para in false_marks:
-							p_node.attrib["type"] = "plain_text"
-						elif re.fullmatch(absatz_pattern, para): # changed to fullmatch seemed better
-							p_node.attrib["type"] = "paragraph_mark"
-						else:
-							p_node.attrib["type"] = "plain_text"
-						p_node.text = para
-					# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
-					# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
-
-					# creating/outputting the tree
-					tree = ET.ElementTree(text_node)
+					# print(filter_list)
+					pages = get_pages(beautifulSoupText)
+					tree = build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name)
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
 					ET.dump(tree)  # shows tree in console
 					print("\n\n")
