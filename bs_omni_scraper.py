@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import json
 import re
 import unicodedata
+import glob
 
 
 parser = argparse.ArgumentParser(description="generate clean XML-files from HTML-files")
@@ -26,6 +27,16 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/BS_Omni_clean/"
 absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
 datum_pattern = r"[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}"
+
+def check_if_duplicate(filename) -> bool:
+	"""Check if same file has already been converted.
+	Returns True if file exists in destination directory.
+	Returns False if file does not yet exist in destination directory."""
+	filename = filename.rstrip("nodate.html")
+	if glob.glob(SAVE_PATH+filename+"*") != []:
+		return True
+	else:
+		return False
 
 
 def parse_text(parsed_html) -> List[str]:
@@ -85,13 +96,18 @@ def split_absatznr(text_list) -> List[str]:
 
 
 def iterate_files(directory, filetype):
-	fname_list = ['BS_APG_001_AUS-2017-58_2017-07-28', 'BS_APG_001_AUS-2017-58_nodate', 'BS_APG_001_BES-2020-16_2020-09-28', 'BS_APG_001_BES-2020-16_nodate', 'BS_APG_001_HB-2015-32_2015-07-22', 'BS_APG_001_HB-2015-32_nodate', 'BS_APG_001_SB-2012-23_2013-09-04', 'BS_APG_001_SB-2012-23_nodate', 'BS_APG_001_SB-2013-105_2014-01-28', 'BS_APG_001_SB-2013-105_nodate', 'BS_APG_001_SB-2014-78_2019-10-29', 'BS_APG_001_SB-2015-36_2016-03-11', 'BS_APG_001_SB-2015-36_nodate', 'BS_APG_001_SB-2015-52_2019-08-13', 'BS_APG_001_SB-2015-52_nodate', 'BS_APG_001_SB-2018-132_nodate', 'BS_APG_001_SB-2018-25_2018-05-31', 'BS_APG_001_SB-2018-25_nodate', 'BS_APG_001_VD-2013-8_2013-05-15', 'BS_APG_001_VD-2013-8_nodate', 'BS_APG_001_VD-2014-132_2015-01-09', 'BS_APG_001_VD-2014-132_nodate', 'BS_APG_001_VD-2014-191_2015-02-11', 'BS_APG_001_VD-2014-191_nodate', 'BS_APG_001_VD-2014-220_2015-07-20', 'BS_APG_001_VD-2014-220_nodate', 'BS_APG_001_VD-2014-44_2014-05-25', 'BS_APG_001_VD-2014-44_nodate', 'BS_APG_001_VD-2015-31_2015-06-08', 'BS_APG_001_VD-2015-31_nodate', 'BS_APG_001_VD-2016-145_2017-02-27', 'BS_APG_001_VD-2016-145_nodate', 'BS_APG_001_VD-2016-182_2017-01-05', 'BS_APG_001_VD-2016-182_nodate', 'BS_APG_001_VD-2016-75_2016-10-19', 'BS_APG_001_VD-2016-75_nodate', 'BS_APG_001_VD-2017-290_2019-01-15', 'BS_APG_001_VD-2017-290_nodate', 'BS_APG_001_VD-2018-101_2019-05-07', 'BS_APG_001_VD-2018-101_nodate', 'BS_APG_001_VD-2018-20_2018-03-19', 'BS_APG_001_VD-2018-20_nodate', 'BS_APG_001_VD-2018-66_2018-11-08', 'BS_APG_001_VD-2018-66_nodate', 'BS_APG_001_VD-2019-214_2020-05-23', 'BS_APG_001_VD-2019-214_nodate', 'BS_APG_001_VD-2019-235_2020-05-19', 'BS_APG_001_VD-2019-235_nodate', 'BS_APG_001_ZB-2014-23_2014-11-25', 'BS_APG_001_ZB-2014-23_nodate', 'BS_SVG_001_BV-2019-22_2020-06-09', 'BS_SVG_001_BV-2019-22_nodate', 'BS_SVG_001_IV-2016-187_2018-08-15', 'BS_SVG_001_IV-2016-187_nodate', 'BS_SVG_001_IV-2017-125_2018-11-14', 'BS_SVG_001_IV-2017-125_nodate', 'BS_SVG_001_IV-2018-107_2019-05-21', 'BS_SVG_001_IV-2018-107_nodate', 'BS_SVG_001_IV-2018-211_2019-05-07', 'BS_SVG_001_IV-2018-211_nodate', 'BS_SVG_001_IV-2018-59_2018-09-25', 'BS_SVG_001_IV-2018-59_nodate', 'BS_SVG_001_IV-2018-83_2019-05-21', 'BS_SVG_001_IV-2018-83_nodate']
+	# fname_list = ['BS_APG_001_AUS-2017-58_2017-07-28', 'BS_APG_001_AUS-2017-58_nodate', 'BS_APG_001_BES-2020-16_2020-09-28', 'BS_APG_001_BES-2020-16_nodate', 'BS_APG_001_HB-2015-32_2015-07-22', 'BS_APG_001_HB-2015-32_nodate', 'BS_APG_001_SB-2012-23_2013-09-04', 'BS_APG_001_SB-2012-23_nodate', 'BS_APG_001_SB-2013-105_2014-01-28', 'BS_APG_001_SB-2013-105_nodate', 'BS_APG_001_SB-2014-78_2019-10-29', 'BS_APG_001_SB-2015-36_2016-03-11', 'BS_APG_001_SB-2015-36_nodate', 'BS_APG_001_SB-2015-52_2019-08-13', 'BS_APG_001_SB-2015-52_nodate', 'BS_APG_001_SB-2018-132_nodate', 'BS_APG_001_SB-2018-25_2018-05-31', 'BS_APG_001_SB-2018-25_nodate', 'BS_APG_001_VD-2013-8_2013-05-15', 'BS_APG_001_VD-2013-8_nodate', 'BS_APG_001_VD-2014-132_2015-01-09', 'BS_APG_001_VD-2014-132_nodate', 'BS_APG_001_VD-2014-191_2015-02-11', 'BS_APG_001_VD-2014-191_nodate', 'BS_APG_001_VD-2014-220_2015-07-20', 'BS_APG_001_VD-2014-220_nodate', 'BS_APG_001_VD-2014-44_2014-05-25', 'BS_APG_001_VD-2014-44_nodate', 'BS_APG_001_VD-2015-31_2015-06-08', 'BS_APG_001_VD-2015-31_nodate', 'BS_APG_001_VD-2016-145_2017-02-27', 'BS_APG_001_VD-2016-145_nodate', 'BS_APG_001_VD-2016-182_2017-01-05', 'BS_APG_001_VD-2016-182_nodate', 'BS_APG_001_VD-2016-75_2016-10-19', 'BS_APG_001_VD-2016-75_nodate', 'BS_APG_001_VD-2017-290_2019-01-15', 'BS_APG_001_VD-2017-290_nodate', 'BS_APG_001_VD-2018-101_2019-05-07', 'BS_APG_001_VD-2018-101_nodate', 'BS_APG_001_VD-2018-20_2018-03-19', 'BS_APG_001_VD-2018-20_nodate', 'BS_APG_001_VD-2018-66_2018-11-08', 'BS_APG_001_VD-2018-66_nodate', 'BS_APG_001_VD-2019-214_2020-05-23', 'BS_APG_001_VD-2019-214_nodate', 'BS_APG_001_VD-2019-235_2020-05-19', 'BS_APG_001_VD-2019-235_nodate', 'BS_APG_001_ZB-2014-23_2014-11-25', 'BS_APG_001_ZB-2014-23_nodate', 'BS_SVG_001_BV-2019-22_2020-06-09', 'BS_SVG_001_BV-2019-22_nodate', 'BS_SVG_001_IV-2016-187_2018-08-15', 'BS_SVG_001_IV-2016-187_nodate', 'BS_SVG_001_IV-2017-125_2018-11-14', 'BS_SVG_001_IV-2017-125_nodate', 'BS_SVG_001_IV-2018-107_2019-05-21', 'BS_SVG_001_IV-2018-107_nodate', 'BS_SVG_001_IV-2018-211_2019-05-07', 'BS_SVG_001_IV-2018-211_nodate', 'BS_SVG_001_IV-2018-59_2018-09-25', 'BS_SVG_001_IV-2018-59_nodate', 'BS_SVG_001_IV-2018-83_2019-05-21', 'BS_SVG_001_IV-2018-83_nodate']
 	for filename in sorted(os.listdir(directory)):
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
-			if filename.endswith("nodate.html"): xml_filename = filename.replace("nodate.html", "0000-00-00.xml")
-			else: xml_filename = filename[:-5] + ".xml"
+			if filename.endswith("nodate.html"):
+				if not check_if_duplicate(filename):
+					xml_filename = filename.replace("nodate.html", "0000-00-00.xml")
+				else:
+					continue
+			else:
+				xml_filename = filename[:-5] + ".xml"
 			full_save_name = os.path.join(SAVE_PATH, xml_filename)
 			print("Current file name: ", os.path.abspath(fname), "will be converted into ", xml_filename)
 			print("\n")
@@ -117,7 +133,7 @@ def iterate_files(directory, filetype):
 					# print(paragraph_list)
 					filter_list = list(filter(lambda x: x != "", paragraph_list))
 					text = list(filter_list)
-					print(filter_list)
+					# print(filter_list)
 
 					# building the xml tree
 					# text node with attributes
@@ -144,13 +160,15 @@ def iterate_files(directory, filetype):
 						text_node.attrib["language"] = loaded_json["Kopfzeile"][0]["Sprachen"].replace('  ', ' ')
 					if filename.endswith("nodate.html"):
 						text_node.attrib["date"] = "0000-00-00"
+						text_node.attrib["year"] = "0000"
+						text_node.attrib["decade"] = "0000"
 					else:
 						text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
+						text_node.attrib["year"] = loaded_json["Datum"][:4]
+						text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
 					text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"].replace('  ', ' ')
 					text_node.attrib["type"] = loaded_json["Signatur"].replace('  ', ' ')
 					text_node.attrib["file"] = filename
-					text_node.attrib["year"] = loaded_json["Datum"][:4]
-					text_node.attrib["decade"] = loaded_json["Datum"][:3]+"0"
 					if "HTML" in loaded_json.keys():
 						text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
 
@@ -174,7 +192,7 @@ def iterate_files(directory, filetype):
 					# creating/outputting the tree
 					tree = ET.ElementTree(text_node)
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
-					ET.dump(tree)  # shows tree in console
+					# ET.dump(tree)  # shows tree in console
 					print("\n\n")
 
 
