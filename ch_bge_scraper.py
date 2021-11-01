@@ -2,7 +2,7 @@
 # coding: utf-8
 # scraper for BS_Omni
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Tag
 import os
 import argparse
 from typing import List
@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 import json
 import re
 import unicodedata
+from duplicate_checker import get_duplicates
+# import dateparser ### install this
+
 
 
 parser = argparse.ArgumentParser(description="generate clean XML-files from HTML-files")
@@ -27,6 +30,7 @@ ALLOWED_CLASSES = [['big', 'bold'], "paraatf", "bold", ['center', 'pagebreak'], 
 
 absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
+absatz_pattern3 = r"([A-Z]\.(-|\s[A-Z])|\d{1,3}(\.\s)?[a-z]{1,3}\)\.?|[a-z]{1,3}\.|§.*:|[a-z]{1,3}\)|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}"
 false_marks = []
 
@@ -35,13 +39,27 @@ false_marks = []
 def parse_text(parsed_html) -> List[str]:
 	"""Get text out of HTML-files."""
 	text = []
-	for tag in parsed_html.findAll(["div"]):
+	for tag in parsed_html.findAll(["div", "br"]):
 		if "class" in tag.attrs:
 			check = any(item in tag["class"] for item in ALLOWED_CLASSES)
 			if check:
 				tag_text = unicodedata.normalize("NFKD", tag.get_text().strip().replace("\n", ""))
 				text.append(tag_text)
+		else: # extracts text in between breaks
+			next_s = tag.nextSibling
+			if not (next_s and isinstance(next_s, NavigableString)):
+				continue
+			next2_s = next_s.nextSibling
+			if next2_s and isinstance(next2_s, Tag) and next2_s.name == 'br':
+				br_text = unicodedata.normalize("NFKD", next_s.strip())
+				text.append(br_text)
 	return text
+
+
+def get_dates():
+	"""Extract dates and times (with timeit) from HTML text """
+	# return dateparser.parse("27. August 2016")
+	pass # try again after installing module else try with regex
 
 
 def get_pages(parsed_html) -> str:
@@ -54,48 +72,23 @@ def get_pages(parsed_html) -> str:
 	return page_list[0]+"–"+page_list[-1]
 
 
-# def split_absatznr(text_list) -> List[str]: ###
-# 	"""Split "paragraph_mark" from rest of the text."""
-# 	paragraph_list = []
-# 	for i, element in enumerate(text_list):
-# 		if element == "Fr." and re.match(absatz_pattern, text_list[i+1]):
-# 			paragraph_list.append(element+" "+text_list[i+1])
-# 			del text_list[i+1]
-# 		elif element == '-':
-# 			paragraph_list.append(element+" "+text_list[i+1])
-# 			del text_list[i+1]
-# 		elif re.search(absatz_pattern2, element):
-# 			match2 = re.search(absatz_pattern2, element).group(0)
-# 			if element.startswith(match2):
-# 				paragraph_list.append(match2)
-# 				paragraph_list.append(element.lstrip(match2))
-# 			elif element == match2:
-# 				paragraph_list.append(element)
-# 			elif element.startswith("(...)"):
-# 				paragraph_list.append("(...)")
-# 				paragraph_list.append(match2)
-# 				paragraph_list.append(element.lstrip("(...)"+match2))
-# 			else:
-# 				paragraph_list.append(element)
-# 		elif re.search(absatz_pattern, element):
-# 			match = re.search(absatz_pattern, element).group(0)
-# 			if element.startswith(match) and i+1 < len(text_list) and text_list[i+1] == "Mietzins":
-# 				paragraph_list.append(element + " " + text_list[i + 1])
-# 				del text_list[i + 1]
-# 			elif element.startswith(match) and not element.startswith(match+"-"):
-# 				paragraph_list.append(match)
-# 				paragraph_list.append(element.lstrip(match))
-# 			elif element.startswith("(...)"):
-# 				paragraph_list.append("(...)")
-# 				paragraph_list.append(match)
-# 				paragraph_list.append(element.lstrip("(...)"+match))
-# 			elif element == match:
-# 				paragraph_list.append(element)
-# 			else:
-# 				paragraph_list.append(element)
-# 		else:
-# 			paragraph_list.append(element)
-# 	return paragraph_list
+def split_absatznr(text_list) -> List[str]:
+	"""Split "paragraph_mark" from rest of the text."""
+	paragraph_list = []
+	for i, elem in enumerate(text_list):
+		if re.match(absatz_pattern3, elem):
+			match = re.search(absatz_pattern3, elem).group(0)
+			if elem.startswith(match) and i > 3:
+				if match.endswith(":"):
+					paragraph_list += elem.lsplit(":")
+				elif match[-1].isupper():
+					paragraph_list.append(elem[:2])
+					paragraph_list.append(elem[3:])
+				else:
+					paragraph_list += re.split(absatz_pattern3, elem, maxsplit=1)
+		else:
+			paragraph_list.append(elem)
+	return paragraph_list
 
 
 def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name):
@@ -143,9 +136,7 @@ def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name):
 		if para.startswith(" "):  # so that random whitespaces in the beginning of paragraphs are deleted
 			para = para[1:]
 		p_node = ET.SubElement(body_node, "p")
-		if para in false_marks:
-			p_node.attrib["type"] = "plain_text"
-		elif re.fullmatch(absatz_pattern, para):  # changed to fullmatch seemed better
+		if re.fullmatch(absatz_pattern3, para):  # changed to fullmatch seemed better
 			p_node.attrib["type"] = "paragraph_mark"
 		else:
 			p_node.attrib["type"] = "plain_text"
@@ -157,9 +148,9 @@ def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name):
 
 
 def iterate_files(directory, filetype):
-	fname_list = []
-	for filename in sorted(os.listdir(directory)):
-		if filename.endswith(filetype):
+	duplicates = get_duplicates(directory) # from the nodate_duplicate_counter.py file
+	for filename in sorted(os.listdir(directory))[:10]:
+		if filename.endswith(filetype) and not in duplicates:
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			if filename.endswith("nodate.html"):
@@ -179,14 +170,20 @@ def iterate_files(directory, filetype):
 					# print(beautifulSoupText)
 					# print("\n")
 					filter_list = list(filter(lambda x: x != "", text))
-					text = list(filter_list)
 					# print(filter_list)
+					text_with_pmarks = split_absatznr(filter_list)
+					# print("\n")
+					# print(text_with_pmarks)
+					filter_list = list(filter(lambda x: x != "", text_with_pmarks))
+					print(filter_list)
+					filter_list = list(filter(lambda x: x != None, filter_list))
+					print(filter_list)
+					filter_list = list(filter(lambda x: x != ". ", filter_list))
 					pages = get_pages(beautifulSoupText)
 					tree = build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name)
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
 					ET.dump(tree)  # shows tree in console
 					print("\n\n")
-
 
 
 def main():
