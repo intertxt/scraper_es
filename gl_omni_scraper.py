@@ -180,10 +180,8 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 
 def iterate_files(directory, filetype):
 	fname_list = []
-	duplicate_list = get_duplicates(directory) # from duplicate_checker.py file because there are some nofate files
-	print(duplicate_list)
 	for filename in sorted(os.listdir(directory)):
-		if filename.endswith(filetype):# and filename not in duplicate_list:
+		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			if filename.endswith("nodate.html"):
