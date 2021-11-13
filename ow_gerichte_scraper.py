@@ -204,7 +204,7 @@ def iterate_files(directory, filetype):
 					# # filter_list = list(filter(lambda x: x != None, filter_list)) # removes elements of type None
 					# # filter_list = list(filter(lambda x: x != "-", filter_list))  # removes - elements
 					# print(filter_list)
-					tree = build_xml_tree(filename, loaded_json, paragraph_list, full_save_name) # generates XML tree
+					tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
 					ET.dump(tree) # shows tree in console
 					print("\n\n")
