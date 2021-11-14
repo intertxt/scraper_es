@@ -28,7 +28,7 @@ ALLOWED_CLASSES = []
 
 absatz_pattern = r"^(\s)?[0-9]+\.([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-D](\.|\))-?(\s[a-z]\))?|([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
@@ -37,7 +37,7 @@ false_marks = []
 def parse_text(parsed_html) -> List[str]:
 	"""Get text out of HTML-files."""
 	text = []
-	tag_list = parsed_html.findAll(["table", "p" ])
+	tag_list = parsed_html.findAll(["table", "p", "span" ])
 	for i, tag in enumerate(tag_list):
 		if tag.name == "table":
 			text.append(str(tag))
@@ -48,6 +48,7 @@ def parse_text(parsed_html) -> List[str]:
 			if tag_text == "":
 				continue
 			else:
+				tag_text = tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " ")
 				text.append(tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " "))
 	return text
 
