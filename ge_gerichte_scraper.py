@@ -183,7 +183,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 
 def iterate_files(directory, filetype):
 	fname_list = []
-	for filename in sorted(os.listdir(directory))[:10]:
+	for filename in sorted(os.listdir(directory)):
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
