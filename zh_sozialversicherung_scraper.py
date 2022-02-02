@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# scraper for SO_Omni
+# scraper for ZH_Sozialversicherung
 
 from bs4 import BeautifulSoup
 import os
@@ -11,6 +11,8 @@ import json
 import re
 import unicodedata
 from duplicate_checker import get_duplicates
+from helperscript import get_files_wo_pmark
+import string
 
 
 parser = argparse.ArgumentParser(description="generate clean XML-files from HTML-files")
@@ -28,7 +30,7 @@ ALLOWED_CLASSES = []
 
 absatz_pattern = r"^(\s)?[0-9]+\.([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-Z](\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+absatz_pattern3 = r"([A-Z]{1,2}(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
@@ -36,28 +38,26 @@ false_marks = []
 
 def parse_text(parsed_html) -> List[str]:
 	"""Get text out of HTML-files."""
-	text_string = unicodedata.normalize("NFKD", parsed_html.get_text())
-	text = text_string.split("\n")
-	clean_text = []
-	for p in text:
-		if p:
-			p = p.strip().replace("   ", " ").replace("     ", " ").replace("   ", " ").replace("  ", " ")
-			if p:
-				clean_text.append(p)
-	# tag_list = parsed_html.findAll(["table", "p" ])
-	# for i, tag in enumerate(tag_list):
-	# 	if tag.name == "table":
-	# 		text.append(str(tag))
-	# 		tag.clear()
-	# 	else:
-	# 		# it already strips the text snippet of whitespace characters
-	# 		tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
-	# 		if tag_text == "":
-	# 			continue
-	# 		else:
-	# 			tag_text = tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " ")
-	# 			text.append(tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " "))
-	return clean_text
+	# this part is for the 12895 files that had a different structure
+	if "<br/>" in str(parsed_html):
+		return unicodedata.normalize("NFKD", parsed_html.get_text(separator= "<br/>", strip=True)).replace("\t", " ").replace("\n", " ").replace("   ", " ").replace("  ", " ").split("<br/>")
+	else:
+	# this is for the files that are structured as "usual"
+		clean_text = []
+		tag_list = parsed_html.findAll(["table", "p" ])
+		for i, tag in enumerate(tag_list):
+			if tag.name == "table":
+				clean_text.append(str(tag))
+				tag.clear()
+			else:
+				# it already strips the text snippet of whitespace characters
+				tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
+				if tag_text == "":
+					continue
+				else:
+					tag_text = tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " ")
+					clean_text.append(tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " "))
+		return clean_text
 
 
 # def remove_hyphens(text):
@@ -76,38 +76,30 @@ def parse_text(parsed_html) -> List[str]:
 def get_paragraphs(text_wo_hyphens) -> List[str]:
 	"""Separate paragraph_marks from paragraphs."""
 	paragraph_list = []
-	para = ""
 	for i, elem in enumerate(text_wo_hyphens):
-		if elem.startswith("<table>"):
-			paragraph_list.append(elem)
+		if elem.startswith("<table"):
+			paragraph_list.append(elem.strip())
 		else:
 			if re.match(datum_pattern, elem):
-				if para != "":
-					para += " "+elem
-				else:
-					para += elem
+				paragraph_list.append(elem.strip())
 			elif re.match(absatz_pattern, elem):
 				match = re.match(absatz_pattern, elem).group(0)
-				if elem.startswith(match + "__"):
-					para += elem
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(para)
-					para = ""
-					paragraph_list.append(match)
-					para += elem[len(match):].strip()
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
 			elif re.match(absatz_pattern3, elem):
 				match = re.match(absatz_pattern3, elem).group(0)
-				if elem.startswith(match + "__"):
-					para += elem
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(match + "2"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(para)
-					para = ""
-					paragraph_list.append(match)
-					para += elem[len(match):].strip()
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
 			else:
 				paragraph_list.append(elem.strip())
-	if para != "":
-		paragraph_list.append(para.strip())
 	return paragraph_list
 
 
@@ -138,7 +130,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 	else:
 		text_node.attrib["page"] = ""
 	if "Meta" in loaded_json.keys():
-		text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"]
+		text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"][:-1]
 	else:
 		text_node.attrib["topics"] = ""
 	text_node.attrib["subtopics"] = ""
@@ -159,11 +151,17 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 	if filename.endswith("nodate.html"):
 		text_node.attrib["year"] = "0000"
 	else:
-		text_node.attrib["year"] = loaded_json["Datum"][:4]
+		if "-" in loaded_json["Datum"]:
+			text_node.attrib["year"] = loaded_json["Datum"][:4]
+		else:
+			text_node.attrib["year"] = loaded_json["Datum"][-4:]
 	if filename.endswith("nodate.html"):
 		text_node.attrib["decade"] = "0000-00-00"
 	else:
-		text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
+		if "-" in loaded_json["Datum"]:
+			text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
+		else:
+			text_node.attrib["decade"] = loaded_json["Datum"][-4:-1] + "0"
 	if "HTML" in loaded_json.keys():
 		text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
 	# body node with paragraph nodes
@@ -191,9 +189,12 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 
 
 def iterate_files(directory, filetype):
+	counter = 0
 	fname_list = []
-	for filename in sorted(os.listdir(directory))[3800:]:
-		if filename.endswith(filetype):# and filename not in duplicate_list:
+	# files_wo_pmarks = set(get_files_wo_pmark("/home/admin1/tb_tool/clean_scraper_data/ZH_Sozialversicherungsgericht_clean"))
+	# for filename in list(difference(set(sorted(os.listdir(directory))), files_wo_pmarks))[:10]: ## see if this works once other zh_soz scraper is done
+	for filename in sorted(os.listdir(directory))[52500:]:
+		if filename.endswith(filetype):# and filename not in duplicate_list: ############
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			if filename.endswith("nodate.html"):
@@ -207,6 +208,7 @@ def iterate_files(directory, filetype):
 				with open(fname_json, "r", encoding="utf-8") as json_file:  # open json file for reading
 					loaded_json = json.load(json_file)  # load json
 					beautifulSoupText = BeautifulSoup(file.read(), "html.parser")  # read html
+					# print(beautifulSoupText)
 					text = parse_text(beautifulSoupText) # parses HTML
 					# print(text)
 					# text_wo_hyphens = remove_hyphens(text)
@@ -220,7 +222,9 @@ def iterate_files(directory, filetype):
 					tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
 					ET.dump(tree) # shows tree in console
-					print("\n\n")
+					print("\n")
+					# counter += 1
+					# print(counter)
 
 
 def main():

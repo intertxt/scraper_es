@@ -26,9 +26,9 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/OW_Gerichte_clean/"
 
 ALLOWED_CLASSES = []
 
-absatz_pattern = r"^(\s)?[0-9]+\.([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
+absatz_pattern = r"^(\s)?[0-9]+(\.)?(\s)?([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-D](\.|\))-?(\s[a-z]\))?|([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|(\s*[a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
@@ -44,7 +44,7 @@ def parse_text(parsed_html) -> List[str]:
 			tag.clear()
 		else:
 			# it already strips the text snippet of whitespace characters
-			tag_text = unicodedata.normalize('NFKD', tag.get_text(separator="<br>", strip=True)).replace("\n", " ").replace("<br>", " ")
+			tag_text = unicodedata.normalize('NFKD', tag.get_text(separator="<br>")).replace("\n", " ").replace("<br>", " ").replace("    ", " ").replace("   ", " ")
 			if tag_text == "":
 				continue
 			else:
@@ -68,32 +68,32 @@ def parse_text(parsed_html) -> List[str]:
 def get_paragraphs(text_wo_hyphens) -> List[str]:
 	"""Separate paragraph_marks from paragraphs."""
 	paragraph_list = []
-	para = ""
 	for i, elem in enumerate(text_wo_hyphens):
-		if elem.startswith("<table>"):
-			paragraph_list.append(elem)
+		elem = elem.strip()
+		if elem.startswith("<table"):
+			paragraph_list.append(elem.strip())
 		else:
 			if re.match(datum_pattern, elem):
-				if para != "":
-					para += " "+elem
-				else:
-					para += elem
+				paragraph_list.append(elem.strip())
 			elif re.match(absatz_pattern, elem):
 				match = re.match(absatz_pattern, elem).group(0)
-				paragraph_list.append(para)
-				para = ""
-				paragraph_list.append(match)
-				para += elem[len(match):].strip()
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer"):
+					paragraph_list.append(elem.strip())
+				else:
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
 			elif re.match(absatz_pattern3, elem):
 				match = re.match(absatz_pattern3, elem).group(0)
-				paragraph_list.append(para)
-				para = ""
-				paragraph_list.append(match)
-				para += elem[len(match):].strip()
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(
+					match + "2"):
+					paragraph_list.append(elem.strip())
+				else:
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
 			else:
 				paragraph_list.append(elem.strip())
-	if para != "":
-		paragraph_list.append(para.strip())
 	return paragraph_list
 
  #def get_pages(parsed_html) -> str:
@@ -170,7 +170,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 			p_node.attrib["type"] = "table"
 		else:
 			p_node.attrib["type"] = "plain_text"
-		p_node.text = para
+		p_node.text = para.strip()
 	# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
 	# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
 	tree = ET.ElementTree(text_node) # creating the tree

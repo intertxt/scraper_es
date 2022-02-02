@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# scraper for TI_Gerichte
+# scraper for VD_FindInfo
 
 from bs4 import BeautifulSoup
 import os
@@ -11,6 +11,7 @@ import json
 import re
 import unicodedata
 from duplicate_checker import get_duplicates
+from helperscript import get_missing_files
 
 
 parser = argparse.ArgumentParser(description="generate clean XML-files from HTML-files")
@@ -26,9 +27,9 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/VD_FindInfo_clean/"
 
 ALLOWED_CLASSES = []
 
-absatz_pattern = r"^(\s)?[0-9]+\.([a-z](\)|\.)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
+absatz_pattern = r"^(\s)?[0-9]+(\.)?(\s)?([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|(\s*[a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
@@ -40,14 +41,13 @@ def parse_text(parsed_html) -> List[str]:
 	tag_list = parsed_html.findAll(["p"])
 	for i, tag in enumerate(tag_list):
 			# it already strips the text snippet of whitespace characters
-			tag_text = unicodedata.normalize('NFKD', tag.get_text(strip=True)).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
+			tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
 			if tag_text == "" or tag_text == " " or  tag_text.startswith("____________") or tag_text.startswith("****"):
 				continue
 			else:
 				tag_text = tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " ")
 				text.append(tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " "))
 	return text
-
 
 
 # def remove_hyphens(text):
@@ -65,31 +65,31 @@ def parse_text(parsed_html) -> List[str]:
 
 def get_paragraphs(text_wo_hyphens) -> List[str]:
 	"""Separate paragraph_marks from paragraphs."""
-	paragraph_list = []
-	for i, elem in enumerate(text_wo_hyphens):
-		if elem.startswith("<table>"):
-			paragraph_list.append(elem)
+	paragraph_list = text_wo_hyphens[:5]
+	for i, elem in enumerate(text_wo_hyphens[5:]):
+		elem = elem.strip()
+		if elem.startswith("<table"):
+			paragraph_list.append(elem.strip())
 		else:
 			if re.match(datum_pattern, elem):
-				paragraph_list.append(elem)
+				paragraph_list.append(elem.strip())
 			elif re.match(absatz_pattern, elem):
 				match = re.match(absatz_pattern, elem).group(0)
-				if elem.startswith(match + "__"):
-					paragraph_list.append(elem)
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(match)
+					paragraph_list.append(match.strip())
 					paragraph_list.append(elem[len(match):].strip())
 			elif re.match(absatz_pattern3, elem):
 				match = re.match(absatz_pattern3, elem).group(0)
-				if elem.startswith(match + "__"):
-					paragraph_list.append(elem)
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(
+					match + "2"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(match)
+					paragraph_list.append(match.strip())
 					paragraph_list.append(elem[len(match):].strip())
-			elif paragraph_list and paragraph_list[-1] and paragraph_list[-1][-1] in ",;" and elem[0].islower():
-				paragraph_list[-1] += " "+elem
-			elif paragraph_list and paragraph_list[-1] and paragraph_list[-1][-1].islower() and elem[0].islower():
-				paragraph_list[-1] += " "+elem
 			else:
 				paragraph_list.append(elem.strip())
 	return paragraph_list
@@ -115,10 +115,13 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 	text_node.attrib["source"] = "https://entscheidsuche.ch"
 	if "Seiten" in loaded_json.keys():
 		text_node.attrib["page"] = loaded_json["Seiten"].replace('  ', ' ')
-	# elif "S." in loaded_json["Abstract"][0]["Text"]:
-	# 	index = loaded_json["Abstract"][0]["Text"].find("S.")+3
-	# 	colon_index = loaded_json["Abstract"][0]["Text"].find(":")
-	# 	text_node.attrib["page"] = loaded_json["Abstract"][0]["Text"][index:colon_index]
+	elif "Abstract" in loaded_json.keys():
+		if "S." in loaded_json["Abstract"][0]["Text"]:
+			index = loaded_json["Abstract"][0]["Text"].find("S.")+3
+			colon_index = loaded_json["Abstract"][0]["Text"].find(":")
+			text_node.attrib["page"] = loaded_json["Abstract"][0]["Text"][index:colon_index]
+		else:
+			text_node.attrib["page"] = ""
 	else:
 		text_node.attrib["page"] = ""
 	if "Meta" in loaded_json.keys():
@@ -167,7 +170,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 			p_node.attrib["type"] = "table"
 		else:
 			p_node.attrib["type"] = "plain_text"
-		p_node.text = para
+		p_node.text = para.strip()
 	# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
 	# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
 	tree = ET.ElementTree(text_node) # creating the tree
@@ -176,8 +179,9 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 
 def iterate_files(directory, filetype):
 	fname_list = []
-	for filename in sorted(os.listdir(directory))[850:]:
-		if filename.endswith(filetype):# and filename not in duplicate_list:
+	scan_list = []
+	for filename in sorted(os.listdir(directory)):
+		if filename.endswith(filetype) and filename.startswith("VD_TC_001_R-c-civile---2018---37_2018-09-10"):# and filename not in duplicate_list:
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			if filename.endswith("nodate.html"):
@@ -193,6 +197,10 @@ def iterate_files(directory, filetype):
 					beautifulSoupText = BeautifulSoup(file.read(), "html.parser")  # read html
 					text = parse_text(beautifulSoupText) # parses HTML
 					# print(text)
+					# skips the files which do not contain text
+					if not text:
+						scan_list.append(filename)
+						continue
 					# text_wo_hyphens = remove_hyphens(text)
 					paragraph_list = get_paragraphs(text)
 					# print(paragraph_list)

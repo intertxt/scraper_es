@@ -28,10 +28,10 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/CH_BGE_clean/"
 
 ALLOWED_CLASSES = [['big', 'bold'], "paraatf", "bold", ['center', 'pagebreak'], "artref", "bgeref_id"]
 
-absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
+absatz_pattern = r"^(\s)?[0-9]+(\.)?(\s)?([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-Z]\.(-|\s[A-Z])|\d{1,3}(\.\s)?[a-z]{1,3}\)\.?|[a-z]{1,3}\.|§.*:|[a-z]{1,3}\)|\d{1,3}\.)"
-datum_pattern = r"[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}"
+absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|(\s*[a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
 
@@ -72,24 +72,36 @@ def get_pages(parsed_html) -> str:
 	return page_list[0]+"–"+page_list[-1]
 
 
-def split_absatznr(text_list) -> List[str]:
-	"""Split "paragraph_mark" from rest of the text."""
+def get_paragraphs(text_wo_hyphens) -> List[str]:
+	"""Separate paragraph_marks from paragraphs."""
 	paragraph_list = []
-	for i, elem in enumerate(text_list):
-		if re.match(absatz_pattern3, elem):
-			match = re.search(absatz_pattern3, elem).group(0)
-			if elem.startswith(match) and i > 3:
-				if match.endswith(":"):
-					paragraph_list += elem.lsplit(":")
-				elif match[-1].isupper():
-					paragraph_list.append(elem[:2])
-					paragraph_list.append(elem[3:])
-				else:
-					paragraph_list += re.split(absatz_pattern3, elem, maxsplit=1)
+	for i, elem in enumerate(text_wo_hyphens):
+		elem = elem.strip()
+		if elem.startswith("<table"):
+			paragraph_list.append(elem.strip())
 		else:
-			paragraph_list.append(elem)
+			if re.match(datum_pattern, elem):
+				paragraph_list.append(elem.strip())
+			elif re.match(absatz_pattern, elem):
+				match = re.match(absatz_pattern, elem).group(0)
+				if elem.startswith(match + "__") or elem.startswith(match + "Abteilung") or elem.startswith(
+						match + "Kammer") or elem.startswith(match + "Auszug"):
+					paragraph_list.append(elem.strip())
+				else:
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
+			elif re.match(absatz_pattern3, elem):
+				match = re.match(absatz_pattern3, elem).group(0)
+				if elem.startswith(match + "__") or elem.startswith(match + "Abteilung") or elem.startswith(
+						match + "Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(
+					match + "2"):
+					paragraph_list.append(elem.strip())
+				else:
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
+			else:
+				paragraph_list.append(elem.strip())
 	return paragraph_list
-
 
 def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name):
 	"""Build an XML-tree."""
@@ -149,8 +161,8 @@ def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name):
 
 def iterate_files(directory, filetype):
 	duplicates = get_duplicates(directory) # from the nodate_duplicate_counter.py file
-	for filename in sorted(os.listdir(directory))[:10]:
-		if filename.endswith(filetype) and not in duplicates:
+	for filename in sorted(os.listdir(directory)):
+		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			if filename.endswith("nodate.html"):
@@ -171,7 +183,7 @@ def iterate_files(directory, filetype):
 					# print("\n")
 					filter_list = list(filter(lambda x: x != "", text))
 					# print(filter_list)
-					text_with_pmarks = split_absatznr(filter_list)
+					text_with_pmarks = get_paragraphs(filter_list)
 					# print("\n")
 					# print(text_with_pmarks)
 					filter_list = list(filter(lambda x: x != "", text_with_pmarks))

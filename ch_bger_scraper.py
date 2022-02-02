@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# scraper for BS_Omni
+# scraper for CH_BGer
 
 from bs4 import BeautifulSoup
 import os
@@ -25,10 +25,10 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/CH_BGer_clean/"
 
 ALLOWED_CLASSES = ["para"]
 
-absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
+absatz_pattern = r"^(\s)?[0-9]+(\.)?(\s)?([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,3}((\.\s)|([a-z]{1,3}\)\.?)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
-datum_pattern = r"[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}"
+absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|(\s*[a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
 
@@ -40,7 +40,7 @@ def parse_text(parsed_html) -> List[str]:
 		if "class" in tag.attrs:
 			check = any(item in tag["class"] for item in ALLOWED_CLASSES)
 			if check:
-				tag_text = unicodedata.normalize("NFKD", tag.get_text().strip().replace("\n", ""))
+				tag_text = unicodedata.normalize("NFKD", tag.get_text().replace("\n", ""))
 				tag_text = tag_text.replace("  ", "")
 				tag_text = tag_text.replace("   ", "")
 				tag_text = tag_text.replace("     ", "")
@@ -62,45 +62,36 @@ def remove_hyphens(text):
 
 
 def get_paragraphs(text_wo_hyphens) -> List[str]:
-	"""Fuse lines to paragraphs."""
+	"""Separate paragraph_marks from paragraphs."""
 	paragraph_list = []
-	para = ""
 	for i, elem in enumerate(text_wo_hyphens):
-		if i < 9 and elem != "":
+		elem = elem.strip()
+		if elem.startswith("<table"):
 			paragraph_list.append(elem.strip())
 		else:
 			if re.match(datum_pattern, elem):
-				if para != "" and para[-1] != " ":
-					para += " "+elem
-				else:
-					para += elem
+				paragraph_list.append(elem.strip())
 			elif re.match(absatz_pattern, elem):
 				match = re.match(absatz_pattern, elem).group(0)
-				if elem.startswith(match + "________"):
-					if para != "" and para[-1] != " ":
-						para += " " + elem
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(para.strip())
-					para = ""
-					paragraph_list.append(match)
-					para += elem[len(match):].strip()
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
 			elif re.match(absatz_pattern3, elem):
 				match = re.match(absatz_pattern3, elem).group(0)
-				if elem.startswith(match + "________"):
-					if para != "" and para[-1] != " ":
-						para += " " + elem
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(
+					match + "2"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(para.strip())
-					para = ""
-					paragraph_list.append(match)
-					para += " " + elem[len(match):].strip()
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
 			else:
-				if para != "" and para[-1] != " ":
-					para += " " + elem
-				else:
-					para += elem
-	paragraph_list.append(para.strip())
+				paragraph_list.append(elem.strip())
 	return paragraph_list
+
 
 
 # def get_pages(parsed_html) -> str:
@@ -203,7 +194,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 
 def iterate_files(directory, filetype):
 	fname_list = []
-	for filename in sorted(os.listdir(directory))[245470:]:
+	for filename in sorted(os.listdir(directory)):
 		if filename.endswith(filetype):
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")

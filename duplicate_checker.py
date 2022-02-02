@@ -18,7 +18,9 @@ def get_duplicates(directory):
     meta_dict = {}
     duplicate_list = []
     for file in sorted(os.listdir(directory)):
+        # if "nodate" in file:
         filename_split = file.rsplit("_", 1)
+        # print(filename_split)
         if filename_split[0] not in meta_dict:
             meta_dict[filename_split[0]] = [{"fullname": file, "size": os.path.getsize(directory+"/"+file)}]
         else:
@@ -34,8 +36,22 @@ def get_duplicates(directory):
                     duplicate_list.append(v[j+1]["fullname"])
             else:
                 i += 1
-    return len(duplicate_list)
+    return duplicate_list, len(duplicate_list)
 
+def check_pendants(directory):
+    # gets a list of files which do not have a json pendant
+    file_dict = {}
+    pendantless_files = []
+    for file in sorted(os.listdir(directory)):
+        file = file[:-5]
+        if file in file_dict:
+            file_dict[file] += 1
+        else:
+            file_dict[file] = 1
+    for k, v in file_dict.items():
+        if v == 1:
+            pendantless_files.append(k)
+    return pendantless_files, len(pendantless_files)
 
     """
     import os
@@ -68,6 +84,7 @@ for k,v in meta_dict.items():
 
 def main():
     print(get_duplicates(PATH_TO_DATA+args.directory))
+    # print(check_pendants(PATH_TO_DATA+args.directory))
 
 if __name__ == '__main__':
 	main()

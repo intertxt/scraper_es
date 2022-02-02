@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# scraper for TI_Gerichte
+# scraper for VD_Omni
 
 from bs4 import BeautifulSoup
 import os
@@ -26,7 +26,11 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/VD_Omni_clean/"
 
 ALLOWED_CLASSES = ["MsoTableGrid"]
 
-absatz_pattern = r"^(\s)?[0-9]+\.([a-z](\)|\.)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
+# absatz_pattern = r"^(\s)?[0-9]+\.([a-z](\)|\.)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
+# absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
+# absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s?[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+# datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
+absatz_pattern = r"^(\s)?[0-9]+\.([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
 absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
@@ -40,13 +44,14 @@ def parse_text(parsed_html) -> List[str]:
 	tag_list = parsed_html.findAll(["p", "table"])
 	for i, tag in enumerate(tag_list):
 			if tag.name == "table":
-				check = any(item in tag["class"] for item in ALLOWED_CLASSES)
-				if check:
-					text.append(str(tag))
-					tag.decompose()
+				# check = any(item in tag["class"] for item in ALLOWED_CLASSES)
+				if tag.has_attr("class"):
+					if any(item in tag["class"] for item in ALLOWED_CLASSES):
+						text.append(str(tag))
+						tag.decompose()
 			else:
 				# it already strips the text snippet of whitespace characters
-				tag_text = unicodedata.normalize('NFKD', tag.get_text(strip=True)).replace("\n", " ").replace("  ",
+				tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ",
 																											  " ").replace(
 					"   ", " ").replace("     ", " ")
 				if tag_text == "" or tag_text == " ":
@@ -75,24 +80,28 @@ def get_paragraphs(text_wo_hyphens) -> List[str]:
 	"""Separate paragraph_marks from paragraphs."""
 	paragraph_list = text_wo_hyphens[:5]
 	for i, elem in enumerate(text_wo_hyphens[5:]):
-		if elem.startswith("<table>"):
-			paragraph_list.append(elem)
+		elem = elem.strip()
+		if elem.startswith("<table"):
+			paragraph_list.append(elem.strip())
 		else:
 			if re.match(datum_pattern, elem):
-				paragraph_list.append(elem)
+				paragraph_list.append(elem.strip())
 			elif re.match(absatz_pattern, elem):
 				match = re.match(absatz_pattern, elem).group(0)
-				if elem.startswith(match + "__"):
-					paragraph_list.append(elem)
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(match)
+					paragraph_list.append(match.strip())
 					paragraph_list.append(elem[len(match):].strip())
 			elif re.match(absatz_pattern3, elem):
 				match = re.match(absatz_pattern3, elem).group(0)
-				if elem.startswith(match + "__"):
-					paragraph_list.append(elem)
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(
+					match + "2"):
+					paragraph_list.append(elem.strip())
 				else:
-					paragraph_list.append(match)
+					paragraph_list.append(match.strip())
 					paragraph_list.append(elem[len(match):].strip())
 			else:
 				paragraph_list.append(elem.strip())
@@ -171,7 +180,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 			p_node.attrib["type"] = "table"
 		else:
 			p_node.attrib["type"] = "plain_text"
-		p_node.text = para
+		p_node.text = para.strip()
 	# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
 	# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
 	tree = ET.ElementTree(text_node) # creating the tree
@@ -181,7 +190,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
 def iterate_files(directory, filetype):
 	fname_list = []
 	scan_list = []
-	for filename in sorted(os.listdir(directory)):
+	for filename in sorted(os.listdir(directory)): # at file 23290 the program stops
 		if filename.endswith(filetype):# and filename not in duplicate_list:
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
@@ -197,7 +206,7 @@ def iterate_files(directory, filetype):
 					loaded_json = json.load(json_file)  # load json
 					beautifulSoupText = BeautifulSoup(file.read(), "html.parser")  # read html
 					text = parse_text(beautifulSoupText) # parses HTML
-					# print(text)
+					print(text)
 					# skips the files which do not contain text
 					if not text:
 						scan_list.append(filename)
@@ -209,15 +218,15 @@ def iterate_files(directory, filetype):
 					filter_list = list(filter(lambda x: x != "", paragraph_list)) # removes empty elements
 					filter_list = list(filter(lambda x: x != None, filter_list)) # removes elements of type None
 					filter_list = list(filter(lambda x: x != "-", filter_list))  # removes - elements
-					print(filter_list)
+					# print(filter_list)
 					tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
 					ET.dump(tree) # shows tree in console
 					print("\n\n")
 			# write the names of files which contain no text but scans only to a textfile
-			with open("list_of_scans.txt", "w", encoding="UTF-8") as list_of_scans:
-				list_of_scans.write(str(scan_list))
-				print(scan_list)
+	# with open("list_of_scans.txt", "w", encoding="UTF-8") as list_of_scans:
+	# 	list_of_scans.write(str(scan_list))
+	# 	print(scan_list)
 
 
 def main():

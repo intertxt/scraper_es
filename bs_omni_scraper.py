@@ -25,10 +25,11 @@ PATH_TO_DATA = args.path_to_data
 
 SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/BS_Omni_clean/"
 
-absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
+absatz_pattern = r"^(\s)?[0-9]+(\.)?(\s)?([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-datum_pattern = r"[0-9][0-9]?\.[\s]{1,2}([A-Z][a-z]+|März)\s[1-9][0-9]{3}"
-
+absatz_pattern3 = r"([A-Z]([IVCMD]+)?(\.|\))-?(\s[a-z]\))?|(\s*[a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
+false_marks = []
 # def check_if_duplicate(filename) -> bool:
 # 	"""Check if same file with same name has already been converted.
 # 	Returns True if file exists in destination directory.
@@ -52,55 +53,156 @@ def parse_text(parsed_html) -> List[str]:
 	return text
 
 
-def split_absatznr(text_list) -> List[str]:
-	"""Split "paragraph_mark" from rest of the text."""
+# def split_absatznr(text_list) -> List[str]:
+# 	"""Split "paragraph_mark" from rest of the text."""
+# 	paragraph_list = []
+# 	for i, element in enumerate(text_list):
+# 		if element == "Fr." and re.match(absatz_pattern, text_list[i+1]):
+# 			paragraph_list.append(element+" "+text_list[i+1])
+# 			del text_list[i+1]
+# 		elif element == '-':
+# 			paragraph_list.append(element+" "+text_list[i+1])
+# 			del text_list[i+1]
+# 		elif re.search(absatz_pattern2, element):
+# 			match2 = re.search(absatz_pattern2, element).group(0)
+# 			if element.startswith(match2):
+# 				paragraph_list.append(match2)
+# 				paragraph_list.append(element.lstrip(match2))
+# 			elif element == match2:
+# 				paragraph_list.append(element)
+# 			elif element.startswith("(...)"):
+# 				paragraph_list.append("(...)")
+# 				paragraph_list.append(match2)
+# 				paragraph_list.append(element.lstrip("(...)"+match2))
+# 			else:
+# 				paragraph_list.append(element)
+# 		elif re.search(absatz_pattern, element):
+# 			match = re.search(absatz_pattern, element).group(0)
+# 			if element.startswith(match) and i+1 < len(text_list) and text_list[i+1] == "Mietzins":
+# 				paragraph_list.append(element + " " + text_list[i + 1])
+# 				del text_list[i + 1]
+# 			elif element.startswith(match) and not element.startswith(match+"-"):
+# 				paragraph_list.append(match)
+# 				paragraph_list.append(element.lstrip(match))
+# 			elif element.startswith("(...)"):
+# 				paragraph_list.append("(...)")
+# 				paragraph_list.append(match)
+# 				paragraph_list.append(element.lstrip("(...)"+match))
+# 			elif element == match:
+# 				paragraph_list.append(element)
+# 			else:
+# 				paragraph_list.append(element)
+# 		else:
+# 			paragraph_list.append(element)
+# 	return paragraph_list
+
+
+def get_paragraphs(text_wo_hyphens) -> List[str]:
+	"""Separate paragraph_marks from paragraphs."""
 	paragraph_list = []
-	for i, element in enumerate(text_list):
-		if element == "Fr." and re.match(absatz_pattern, text_list[i+1]):
-			paragraph_list.append(element+" "+text_list[i+1])
-			del text_list[i+1]
-		elif element == '-':
-			paragraph_list.append(element+" "+text_list[i+1])
-			del text_list[i+1]
-		elif re.search(absatz_pattern2, element):
-			match2 = re.search(absatz_pattern2, element).group(0)
-			if element.startswith(match2):
-				paragraph_list.append(match2)
-				paragraph_list.append(element.lstrip(match2))
-			elif element == match2:
-				paragraph_list.append(element)
-			elif element.startswith("(...)"):
-				paragraph_list.append("(...)")
-				paragraph_list.append(match2)
-				paragraph_list.append(element.lstrip("(...)"+match2))
-			else:
-				paragraph_list.append(element)
-		elif re.search(absatz_pattern, element):
-			match = re.search(absatz_pattern, element).group(0)
-			if element.startswith(match) and i+1 < len(text_list) and text_list[i+1] == "Mietzins":
-				paragraph_list.append(element + " " + text_list[i + 1])
-				del text_list[i + 1]
-			elif element.startswith(match) and not element.startswith(match+"-"):
-				paragraph_list.append(match)
-				paragraph_list.append(element.lstrip(match))
-			elif element.startswith("(...)"):
-				paragraph_list.append("(...)")
-				paragraph_list.append(match)
-				paragraph_list.append(element.lstrip("(...)"+match))
-			elif element == match:
-				paragraph_list.append(element)
-			else:
-				paragraph_list.append(element)
+	for i, elem in enumerate(text_wo_hyphens):
+		elem = elem.strip()
+		if elem.startswith("<table"):
+			paragraph_list.append(elem.strip())
 		else:
-			paragraph_list.append(element)
+			if re.match(datum_pattern, elem):
+				paragraph_list.append(elem.strip())
+			elif re.match(absatz_pattern, elem):
+				match = re.match(absatz_pattern, elem).group(0)
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer"):
+					paragraph_list.append(elem.strip())
+				else:
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
+			elif re.match(absatz_pattern3, elem):
+				match = re.match(absatz_pattern3, elem).group(0)
+				if elem.startswith(match + "__") or elem.startswith(match + " Abteilung") or elem.startswith(
+						match + " Kammer") or text_wo_hyphens[i] == text_wo_hyphens[-1] or elem.startswith(
+					match + "2"):
+					paragraph_list.append(elem.strip())
+				else:
+					paragraph_list.append(match.strip())
+					paragraph_list.append(elem[len(match):].strip())
+			else:
+				paragraph_list.append(elem.strip())
 	return paragraph_list
+
+
+def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
+	"""Build an XML-tree."""
+	text_node = ET.Element("text")
+	text_node.attrib["id"] = filename[:-5]
+	text_node.attrib["author"] = ""
+	if "Kopfzeile" in loaded_json.keys():
+		text_node.attrib["title"] = loaded_json["Kopfzeile"][0]["Text"].replace('  ', ' ')
+	text_node.attrib["source"] = "https://entscheidsuche.ch"
+	if "Seiten" in loaded_json.keys():
+		text_node.attrib["page"] = loaded_json["Seiten"].replace('  ', ' ')
+	elif "S." in loaded_json["Abstract"][0]["Text"]:
+		index = loaded_json["Abstract"][0]["Text"].find("S.")+3
+		colon_index = loaded_json["Abstract"][0]["Text"].find(":")
+		text_node.attrib["page"] = loaded_json["Abstract"][0]["Text"][index:colon_index]
+	else:
+		text_node.attrib["page"] = ""
+	if "Meta" in loaded_json.keys():
+		text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"][:-1]
+	else:
+		text_node.attrib["topics"] = ""
+	text_node.attrib["subtopics"] = ""
+	if "Sprache" in loaded_json.keys():
+		text_node.attrib["language"] = loaded_json["Sprache"].replace('  ', ' ')
+	else:
+		text_node.attrib["language"] = loaded_json["Kopfzeile"][0]["Sprachen"].replace('  ', ' ')
+	if filename.endswith("nodate.html"):
+		text_node.attrib["date"] = "0000-00-00"
+	else:
+		text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
+	if "Abstract" in loaded_json.keys():
+		text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"]
+	else:
+		text_node.attrib["description"] = loaded_json["Kopfzeile"][0]["Text"]
+	text_node.attrib["type"] = loaded_json["Signatur"].replace('  ', ' ')
+	text_node.attrib["file"] = filename
+	if filename.endswith("nodate.html"):
+		text_node.attrib["year"] = "0000"
+	else:
+		text_node.attrib["year"] = loaded_json["Datum"][:4]
+	if filename.endswith("nodate.html"):
+		text_node.attrib["decade"] = "0000-00-00"
+	else:
+		text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
+	if "HTML" in loaded_json.keys():
+		text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
+	# body node with paragraph nodes
+	# header_node = ET.SubElement(text_node, "header") # drinlassen?
+	body_node = ET.SubElement(text_node, "body")
+	for para in filter_list:
+		if para.startswith(" "):  # so that random whitespaces in the beginning of paragraphs are deleted
+			para = para[1:]
+		p_node = ET.SubElement(body_node, "p")
+		if para in false_marks:
+			p_node.attrib["type"] = "plain_text"
+		elif re.match(datum_pattern, para):
+			p_node.attrib["type"] = "plain_text"
+		elif re.fullmatch(absatz_pattern3, para) or re.fullmatch(absatz_pattern2, para) or re.fullmatch(absatz_pattern, para):
+			p_node.attrib["type"] = "paragraph_mark"
+		elif para.startswith("<table"):
+			p_node.attrib["type"] = "table"
+		else:
+			p_node.attrib["type"] = "plain_text"
+		p_node.text = para.strip()
+	# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
+	# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
+	tree = ET.ElementTree(text_node) # creating the tree
+	return tree
 
 
 def iterate_files(directory, filetype):
 	# fname_list = ['BS_APG_001_AUS-2017-58_2017-07-28', 'BS_APG_001_AUS-2017-58_nodate', 'BS_APG_001_BES-2020-16_2020-09-28', 'BS_APG_001_BES-2020-16_nodate', 'BS_APG_001_HB-2015-32_2015-07-22', 'BS_APG_001_HB-2015-32_nodate', 'BS_APG_001_SB-2012-23_2013-09-04', 'BS_APG_001_SB-2012-23_nodate', 'BS_APG_001_SB-2013-105_2014-01-28', 'BS_APG_001_SB-2013-105_nodate', 'BS_APG_001_SB-2014-78_2019-10-29', 'BS_APG_001_SB-2015-36_2016-03-11', 'BS_APG_001_SB-2015-36_nodate', 'BS_APG_001_SB-2015-52_2019-08-13', 'BS_APG_001_SB-2015-52_nodate', 'BS_APG_001_SB-2018-132_nodate', 'BS_APG_001_SB-2018-25_2018-05-31', 'BS_APG_001_SB-2018-25_nodate', 'BS_APG_001_VD-2013-8_2013-05-15', 'BS_APG_001_VD-2013-8_nodate', 'BS_APG_001_VD-2014-132_2015-01-09', 'BS_APG_001_VD-2014-132_nodate', 'BS_APG_001_VD-2014-191_2015-02-11', 'BS_APG_001_VD-2014-191_nodate', 'BS_APG_001_VD-2014-220_2015-07-20', 'BS_APG_001_VD-2014-220_nodate', 'BS_APG_001_VD-2014-44_2014-05-25', 'BS_APG_001_VD-2014-44_nodate', 'BS_APG_001_VD-2015-31_2015-06-08', 'BS_APG_001_VD-2015-31_nodate', 'BS_APG_001_VD-2016-145_2017-02-27', 'BS_APG_001_VD-2016-145_nodate', 'BS_APG_001_VD-2016-182_2017-01-05', 'BS_APG_001_VD-2016-182_nodate', 'BS_APG_001_VD-2016-75_2016-10-19', 'BS_APG_001_VD-2016-75_nodate', 'BS_APG_001_VD-2017-290_2019-01-15', 'BS_APG_001_VD-2017-290_nodate', 'BS_APG_001_VD-2018-101_2019-05-07', 'BS_APG_001_VD-2018-101_nodate', 'BS_APG_001_VD-2018-20_2018-03-19', 'BS_APG_001_VD-2018-20_nodate', 'BS_APG_001_VD-2018-66_2018-11-08', 'BS_APG_001_VD-2018-66_nodate', 'BS_APG_001_VD-2019-214_2020-05-23', 'BS_APG_001_VD-2019-214_nodate', 'BS_APG_001_VD-2019-235_2020-05-19', 'BS_APG_001_VD-2019-235_nodate', 'BS_APG_001_ZB-2014-23_2014-11-25', 'BS_APG_001_ZB-2014-23_nodate', 'BS_SVG_001_BV-2019-22_2020-06-09', 'BS_SVG_001_BV-2019-22_nodate', 'BS_SVG_001_IV-2016-187_2018-08-15', 'BS_SVG_001_IV-2016-187_nodate', 'BS_SVG_001_IV-2017-125_2018-11-14', 'BS_SVG_001_IV-2017-125_nodate', 'BS_SVG_001_IV-2018-107_2019-05-21', 'BS_SVG_001_IV-2018-107_nodate', 'BS_SVG_001_IV-2018-211_2019-05-07', 'BS_SVG_001_IV-2018-211_nodate', 'BS_SVG_001_IV-2018-59_2018-09-25', 'BS_SVG_001_IV-2018-59_nodate', 'BS_SVG_001_IV-2018-83_2019-05-21', 'BS_SVG_001_IV-2018-83_nodate']
 	duplicates = get_duplicates(directory) # from the nodate_duplicate_counter.py file
 	for filename in sorted(os.listdir(directory)):
-		if filename.endswith(filetype) and filename not in duplicates:
+		if filename.endswith(filetype) and filename not in duplicates[0]:
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			if filename.endswith("nodate.html"):
@@ -120,7 +222,6 @@ def iterate_files(directory, filetype):
 					beautifulSoupText = BeautifulSoup(file.read(), "html.parser")  #read html
 					# print(beautifulSoupText)
 					text = parse_text(beautifulSoupText)
-
 					# print(text)
 					# text_wo_hyphens = remove_hyphens(filtered_paragraph_list)
 					# print(text_wo_hyphens)
@@ -131,7 +232,8 @@ def iterate_files(directory, filetype):
 					# print("\n")
 					# print("text:\n")
 					# print(text)
-					paragraph_list = split_absatznr(text)
+					# paragraph_list = split_absatznr(text) ####
+					paragraph_list = get_paragraphs(text)
 					# print("paragraph_list:\n")
 					# print(paragraph_list)
 					filter_list = list(filter(lambda x: x != "", paragraph_list))
@@ -139,61 +241,7 @@ def iterate_files(directory, filetype):
 					# print(filter_list)
 
 					# building the xml tree
-					# text node with attributes
-					text_node = ET.Element("text")
-					text_node.attrib["id"] = filename[:-5]
-					text_node.attrib["author"] = ""
-					if "Kopfzeile" in loaded_json.keys():
-						text_node.attrib["title"] = loaded_json["Kopfzeile"][0]["Text"].replace('  ', ' ')
-					# else:
-					# 	text_node.attrib["title"] = get_title(beautifulSoupText)
-					text_node.attrib["source"] = "https://entscheidsuche.ch"  # ?
-					if "Seiten" in loaded_json.keys():
-						text_node.attrib["page"] = loaded_json["Seiten"].replace('  ', ' ')
-					else:
-						text_node.attrib["page"] = ""
-					if "Meta" in loaded_json.keys():
-						text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"].replace('  ', ' ').strip()
-					else:
-						text_node.attrib["topics"] = ""
-					text_node.attrib["subtopics"] = ""
-					if "Sprache" in loaded_json.keys():
-						text_node.attrib["language"] = loaded_json["Sprache"].replace('  ', ' ')
-					else:
-						text_node.attrib["language"] = loaded_json["Kopfzeile"][0]["Sprachen"].replace('  ', ' ')
-					if filename.endswith("nodate.html"):
-						text_node.attrib["date"] = "0000-00-00"
-						text_node.attrib["year"] = "0000"
-						text_node.attrib["decade"] = "0000"
-					else:
-						text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
-						text_node.attrib["year"] = loaded_json["Datum"][:4]
-						text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
-					text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"].replace('  ', ' ')
-					text_node.attrib["type"] = loaded_json["Signatur"].replace('  ', ' ')
-					text_node.attrib["file"] = filename
-					if "HTML" in loaded_json.keys():
-						text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
-
-					# body node with paragraph nodes
-					# header_node = ET.SubElement(text_node, "header") # drinlassen?
-					body_node = ET.SubElement(text_node, "body")
-					for para in filter_list:
-						if para.startswith(" "): # so that random whitespaces in the beginning of paragraphs are deleted
-							para = para[1:]
-						p_node = ET.SubElement(body_node, "p")
-						# if para in false_marks:
-						# 	p_node.attrib["type"] = "plain_text"
-						if re.fullmatch(absatz_pattern, para): # changed to fullmatch seemed better
-							p_node.attrib["type"] = "paragraph_mark"
-						else:
-							p_node.attrib["type"] = "plain_text"
-						p_node.text = para
-					# pb_node = ET.SubElement(body_node, "pb") # drinlassen?
-					# footnote_node = ET.SubElement(text_node, "footnote") # drinlassen?
-
-					# creating/outputting the tree
-					tree = ET.ElementTree(text_node)
+					tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name)  # generates XML tree
 					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
 					ET.dump(tree)  # shows tree in console
 					print("\n\n")
