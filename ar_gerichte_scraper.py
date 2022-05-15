@@ -202,10 +202,13 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes: Lis
         elif re.match(datum_pattern, para):
             p_node.attrib["type"] = "plain_text"
         elif footnotes and para.isdigit():
-            if para in footnotes:
-                fn_node = ET.SubElement(p_node, "fn")
-                fn_node.text = f"{para}, {footnotes[para]}"
-                continue
+             if para in footnotes:
+                 p_node.attrib["type"] = "footnote_mark"
+                 p_node.text = para
+                 # fn_node = ET.SubElement(p_node, "fn")
+                 # fn_node.text = f"{para}, {footnotes[para]}"
+                 # continue
+
         elif re.fullmatch(absatz_pattern3, para) or re.fullmatch(absatz_pattern2, para) or re.fullmatch(absatz_pattern, para):
             p_node.attrib["type"] = "paragraph_mark"
         elif para.startswith("<table"):
@@ -213,14 +216,19 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes: Lis
         else:
             p_node.attrib["type"] = "plain_text"
         p_node.text = para.strip()
+    for fn_mark in footnotes:
+        p_node = ET.SubElement(text_node, "p")
+        p_node.attrib["type"] = "footnote"
+        p_node.text = f"{fn_mark} {footnotes[fn_mark]}"
     tree = ET.ElementTree(text_node) # creating the tree
+    ET.indent(tree, level=0)
     return tree
 
 
 
 def main():
-    for filename in sorted(os.listdir(PATH_TO_DATA))[:2]:
-        if filename.endswith("pdf"): # and filename[:-4] and filename[:-4] not in os.listdir(SAVE_PATH) and filename not in ["AR_OG_003_OG-O3V-16-32_2017-10-31.pdf", "AR_KG_005_Verwaltung-ARGVP-199_1997-12-04.pdf", "AR_KG_005_Verwaltung-ARGVP-1997-1318_1997-12-04.pdf", "AR_OG_003_OG-O3V-15-31_2016-04-26.pdf"]:
+    for filename in sorted(os.listdir(PATH_TO_DATA)):
+        if filename.endswith("pdf") and filename.startswith("AR_OG_008_OG-FE3-17-2_2017-04-12"): # and filename[:-4] and filename[:-4] not in os.listdir(SAVE_PATH) and filename not in ["AR_OG_003_OG-O3V-16-32_2017-10-31.pdf", "AR_KG_005_Verwaltung-ARGVP-199_1997-12-04.pdf", "AR_KG_005_Verwaltung-ARGVP-1997-1318_1997-12-04.pdf", "AR_OG_003_OG-O3V-15-31_2016-04-26.pdf"]:
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
             # parse with tika library from separate script
             parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
