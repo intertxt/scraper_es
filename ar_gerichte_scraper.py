@@ -14,7 +14,7 @@ import pdftotree
 import re
 from typing import List, Tuple
 import json
-
+import xml
 
 arg_parser = argparse.ArgumentParser(description="extract Text from PDF-files")
 arg_parser.add_argument("-p", "--path_to_data", type=str, help="path to the folder containing PDFs")
@@ -22,10 +22,8 @@ arg_parser.add_argument("-s", "--save_folder", type=str, help="name of the folde
 
 args = arg_parser.parse_args()
 
-
-PATH_TO_DATA = "/home/admin1/tb_tool/scraping_data/"+args.path_to_data # Gerichtname
-SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/"+args.save_folder # Gerichtname_clean
-
+PATH_TO_DATA = "/home/admin1/tb_tool/scraping_data/" + args.path_to_data  # Gerichtname
+SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/" + args.save_folder  # Gerichtname_clean
 
 absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?(\s|$)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?(\s|$)"
@@ -33,24 +31,30 @@ absatz_pattern3 = r"^([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,3}((\.\s)|([a-z]{1,3}
 datum_pattern = r"[0-9][0-9]?\.(\s?(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)|([0-9]{2}\.))"
 false_marks = []
 
+
 def split_lines(parsed_text: str) -> List[str]:
-    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace("            ", "").replace("……………...", "").replace("……… ", "").replace("   ", " ") for line in parsed_text.split("\n")]
+    split_lines = [
+        line.strip().replace("     ", " ").replace("\uf02d", "").replace("            ", "").replace("……………...",
+                                                                                                     "").replace("……… ",
+                                                                                                                 "").replace(
+            "   ", " ") for line in parsed_text.split("\n")]
     return split_lines
+
 
 def get_pages(lines: List[str]) -> str:
     pages = [lines.pop(lines.index(line)) for line in lines if line.startswith("Seite") and line[-1].isdigit()]
     pages = [line.split(" ") for line in pages]
     if pages:
         if pages[0][1] == "2":
-            return "1-"+pages[-1][1]
+            return "1-" + pages[-1][1]
         else:
-            return pages[0][1]+"-"+pages[-1][1]
+            return pages[0][1] + "-" + pages[-1][1]
     else:
         return ""
 
 
 def remove_hyphens(lines: List[str]) -> List[str]:
-    return [line.rstrip("-") if line.endswith("-") else line+" " for line in lines]
+    return [line.rstrip("-") if line.endswith("-") else line + " " for line in lines]
 
 
 def get_footnotes(lines: List[str]) -> dict[str: str]:
@@ -62,14 +66,14 @@ def get_footnotes(lines: List[str]) -> dict[str: str]:
             # footnotes.append(fn[:2].strip())
             counter = 0
             fn_parts = []
-            if lines and lines[i+counter] and len(lines[i+counter])>1:
-                while not lines[i+counter].endswith("."):
-                    fn_parts.append(lines[i+counter])
-                    lines[i+counter] = ""
+            if lines and lines[i + counter] and len(lines[i + counter]) > 1:
+                while not lines[i + counter].endswith("."):
+                    fn_parts.append(lines[i + counter])
+                    lines[i + counter] = ""
                     counter += 1
-                fn_parts.append(lines[i+counter])
+                fn_parts.append(lines[i + counter])
                 lines[i + counter] = ""
-                fn_parts = [line.strip("-") for line in fn_parts] # removes trailing hyphens
+                fn_parts = [line.strip("-") for line in fn_parts]  # removes trailing hyphens
                 if re.match(fn_pattern2, line):
                     fn_entry = "".join(fn_parts).split(" ", 1)
                 else:
@@ -86,21 +90,25 @@ def get_paras(lines: List[str]) -> List[str]:
     counter = 0
     para = ""
     clean_lines = []
-    fn_ref_pattern = r"([a-z]|-|%)(\d{1,2})(\s\w|\.|\))"
+    pm_counter = 0
+    # fn_ref_pattern = r"([a-z]|-|%)(\d{1,2})(\s\w|\.|\))"
     for i, line in enumerate(lines):
         line = line.strip()
         if line:
-        # match pure paragraph numbers
-            if (re.fullmatch(absatz_pattern, line) or re.fullmatch(absatz_pattern2, line) or re.fullmatch(absatz_pattern3, line)) and not re.fullmatch(datum_pattern, line):
+            # match pure paragraph numbers
+            if (re.fullmatch(absatz_pattern, line) or re.fullmatch(absatz_pattern2, line) or re.fullmatch(
+                    absatz_pattern3, line)) and not re.fullmatch(datum_pattern, line) and line != "272.":
                 if para:
                     clean_lines.append(para.strip())
                     para = ""
                     clean_lines.append(line)
                 else:
                     clean_lines.append(line)
-
-           # match paragraph numbers with additional text and split
-            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer"):
+                pm_counter+=1
+            # match paragraph numbers with additional text and split
+            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3,
+                                                                                                line)) and not re.match(
+                    datum_pattern, line) and not line.endswith("Kammer") and not line.startswith("272."):
                 split_line = line.split(" ", 1)
                 # print(split_line)
                 if para:
@@ -110,36 +118,42 @@ def get_paras(lines: List[str]) -> List[str]:
                         if elem.endswith("-"):
                             para += elem[:-1]
                         else:
-                            para += elem+" "
+                            para += elem + " "
                 else:
                     for elem in split_line[1:]:
                         if elem.endswith("-"):
                             para += elem[:-1]
                         else:
-                            para += elem+" "
+                            para += elem + " "
                 clean_lines.append(split_line[0])
-                
-        # get footnote reference in text
-            elif re.search(fn_ref_pattern, line):
-                matches = [match[1] for match in re.findall(fn_ref_pattern, line)]
-                for match in matches:
-                    line = line.replace(match, "")
-                if line.endswith("-"):
-                    para += line[:-1]
-                else:
-                    para += line+" "
-                for match in matches:
-                    clean_lines.append(para)
-                    para = ""
-                    clean_lines.append(match)
+                pm_counter+=1
+
+            # # get footnote reference in text
+            #     elif re.search(fn_ref_pattern, line):
+            #         matches = [match[1] for match in re.findall(fn_ref_pattern, line)]
+            #         for match in matches:
+            #             line = line.replace(match, "")
+            #         if line.endswith("-"):
+            #             para += line[:-1]
+            #         else:
+            #             para += line+" "
+            #         for match in matches:
+            #             clean_lines.append(para)
+            #             para = ""
+            #             clean_lines.append(match)
 
             # all other lines/paras
             else:
-                if line.endswith("-"):
-                    para += line[:-1]
+                if pm_counter==0:
+                    if line.endswith("-"):
+                        clean_lines.append(line[:-1])
+                    else:
+                        clean_lines.append(line+ " ")
                 else:
-                    para += line+" "
-
+                    if line.endswith("-"):
+                        para += line[:-1]
+                    else:
+                        para += line + " "
 
     # if para is not an empty string it is appended to the clean_lines list
     if para:
@@ -194,41 +208,68 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes: Lis
         text_node.attrib["url"] = loaded_json["HTML"]["URL"].replace('  ', ' ')
     # body node with paragraph nodes
     # header_node = ET.SubElement(text_node, "header") # drinlassen?
+    fn_ref_pattern = r"([a-z]|-|%)(\d{1,2})(\s\w|\.|\))"
     body_node = ET.SubElement(text_node, "body")
     for para in filter_list:
         p_node = ET.SubElement(body_node, "p")
-        if para in false_marks:
+        match_indeces = []
+        if footnotes and re.search(fn_ref_pattern, para):
+            footnotes_copy = footnotes.copy()
+            matches = re.findall(fn_ref_pattern, para)
+            for match in matches:
+                if match[1] in footnotes_copy:
+                    # # get footnote reference in text
+                    # matches = [match[1] for match in re.findall(fn_ref_pattern, para)]
+                    # for match in matches:
+                    #     match_indeces.append((para.index(match), match))
+                    para = re.sub(fr"(?:[a-z]|-|%)({match[1]})(?:\s\w|\.|\))", f"{match[0]} [{match[1]}] {match[2]}", para)
+                    del footnotes_copy[match[1]]
+            p_node.attrib["type"] = "plain_text"
+            # if para in footnotes:
+            #     fn_node = ET.SubElement(p_node, "footnote_mark")
+            #     fn_node.text = para
+            #     continue
+        # p_node = ET.SubElement(body_node, "p")
+        elif para in false_marks:
             p_node.attrib["type"] = "plain_text"
         elif re.match(datum_pattern, para):
             p_node.attrib["type"] = "plain_text"
-        elif footnotes and para.isdigit():
-             if para in footnotes:
-                 p_node.attrib["type"] = "footnote_mark"
-                 p_node.text = para
-                 # fn_node = ET.SubElement(p_node, "fn")
-                 # fn_node.text = f"{para}, {footnotes[para]}"
-                 # continue
+        # elif footnotes and para.isdigit():
+        #      if para in footnotes:
+        #          p_node.attrib["type"] = "footnote_mark"
+        #          p_node.text = para
+        #          # fn_node = ET.SubElement(p_node, "fn")
+        #          # fn_node.text = f"{para}, {footnotes[para]}"
+        #          # continue
 
-        elif re.fullmatch(absatz_pattern3, para) or re.fullmatch(absatz_pattern2, para) or re.fullmatch(absatz_pattern, para):
+        elif re.fullmatch(absatz_pattern3, para) or re.fullmatch(absatz_pattern2, para) or re.fullmatch(absatz_pattern,
+                                                                                                        para):
             p_node.attrib["type"] = "paragraph_mark"
         elif para.startswith("<table"):
             p_node.attrib["type"] = "table"
         else:
             p_node.attrib["type"] = "plain_text"
         p_node.text = para.strip()
+        # if match_indeces:
+        #     for ind, ziffer in match_indeces:
+        #         fn_node = ET.Element("footnote_mark")
+        #         fn_node.text = ziffer
+        #         p_node.insert(ind, fn_node)
+        #         print(ind)
+    body_footnote_node = ET.SubElement(text_node, "body_footnote")
     for fn_mark in footnotes:
-        p_node = ET.SubElement(text_node, "p")
+        p_node = ET.SubElement(body_footnote_node, "p")
         p_node.attrib["type"] = "footnote"
         p_node.text = f"{fn_mark} {footnotes[fn_mark]}"
-    tree = ET.ElementTree(text_node) # creating the tree
+    tree = ET.ElementTree(text_node)  # creating the tree
     ET.indent(tree, level=0)
     return tree
 
 
-
 def main():
     for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and filename.startswith("AR_OG_008_OG-FE3-17-2_2017-04-12"): # and filename[:-4] and filename[:-4] not in os.listdir(SAVE_PATH) and filename not in ["AR_OG_003_OG-O3V-16-32_2017-10-31.pdf", "AR_KG_005_Verwaltung-ARGVP-199_1997-12-04.pdf", "AR_KG_005_Verwaltung-ARGVP-1997-1318_1997-12-04.pdf", "AR_OG_003_OG-O3V-15-31_2016-04-26.pdf"]:
+        if filename.endswith("pdf") and filename.startswith(
+                "AR_OG_008_OG-FE3-17-2_2017-04-12"):  # and filename[:-4] and filename[:-4] not in os.listdir(SAVE_PATH) and filename not in ["AR_OG_003_OG-O3V-16-32_2017-10-31.pdf", "AR_KG_005_Verwaltung-ARGVP-199_1997-12-04.pdf", "AR_KG_005_Verwaltung-ARGVP-1997-1318_1997-12-04.pdf", "AR_OG_003_OG-O3V-15-31_2016-04-26.pdf"]:
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
             # parse with tika library from separate script
             parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
@@ -260,16 +301,19 @@ def main():
             # print(clean_text)
 
             # open json pendant
-            json_name = filename[:-3]+"json"
+            json_name = filename[:-3] + "json"
             if json_name in sorted(os.listdir(PATH_TO_DATA)):
                 with open(os.path.join(PATH_TO_DATA, json_name), "r", encoding="utf-8") as json_file:
                     loaded_json = json.load(json_file)  # load json
                     tree = build_xml_tree(filename, loaded_json, clean_text, footnotes, pages)  # generates XML tree
-                    tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
+                    # tree_string = ET.tostring(tree, encoding='unicode', method='xml').replace("&lt;", "<")
+                    # tree_string = tree_string.replace("&gt;", ">")
+                    # tree = ET.ElementTree(ET.fromstring(tree_string))
+                    tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8",
+                               xml_declaration=True)  # writes tree to file
                     ET.dump(tree)  # shows tree in console
 
 
-    
             print("\n===========================================================\n\n")
 
 
