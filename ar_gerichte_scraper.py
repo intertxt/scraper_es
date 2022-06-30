@@ -222,7 +222,7 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes: Lis
                     # matches = [match[1] for match in re.findall(fn_ref_pattern, para)]
                     # for match in matches:
                     #     match_indeces.append((para.index(match), match))
-                    para = re.sub(fr"(?:[a-z]|-|%)({match[1]})(?:\s\w|\.|\))", f"{match[0]} [{match[1]}] {match[2]}", para)
+                    para = re.sub(fr"(?:[a-z]|-|%)({match[1]})(?:\s\w|\.|\))", f"{match[0]} [[{match[1]}]] {match[2]}", para)
                     del footnotes_copy[match[1]]
             p_node.attrib["type"] = "plain_text"
             # if para in footnotes:
@@ -268,8 +268,7 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes: Lis
 
 def main():
     for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and filename.startswith(
-                "AR_OG_008_OG-FE3-17-2_2017-04-12"):  # and filename[:-4] and filename[:-4] not in os.listdir(SAVE_PATH) and filename not in ["AR_OG_003_OG-O3V-16-32_2017-10-31.pdf", "AR_KG_005_Verwaltung-ARGVP-199_1997-12-04.pdf", "AR_KG_005_Verwaltung-ARGVP-1997-1318_1997-12-04.pdf", "AR_OG_003_OG-O3V-15-31_2016-04-26.pdf"]:
+        if filename.endswith("pdf") and filename not in ["AR_OG_003_OG-O3V-16-32_2017-10-31.pdf", "AR_KG_005_Verwaltung-ARGVP-199_1997-12-04.pdf", "AR_KG_005_Verwaltung-ARGVP-1997-1318_1997-12-04.pdf", "AR_OG_003_OG-O3V-15-31_2016-04-26.pdf"]:
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
             # parse with tika library from separate script
             parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))

@@ -195,7 +195,7 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, pages: str, fo
 
 def main():
     for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and filename[:-4] + ".xml":
+        if filename.endswith("pdf"):
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
             # parse with tika library from separate script
             parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
@@ -226,11 +226,11 @@ def main():
                     tree = build_xml_tree(filename, loaded_json, clean_text, pages)  # generates XML tree # footnotes argument removed here bc no fn in text
                     tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
                     ET.dump(tree)  # shows tree in console
-            # print(parsed_text)
-            # print(lines)
+            print(parsed_text)
+            print(lines)
             # print(pages)
-#             print(footnotes)
-#             print(clean_text)
+            # print(footnotes)
+            # print(clean_text)
 
 
 
