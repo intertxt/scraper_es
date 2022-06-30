@@ -105,6 +105,9 @@ def get_paras(lines: List[str]) -> List[str]:
                 para = ""
                 para += line+" "
 
+            elif line.startswith("http"):
+                continue
+                
            # match paragraph numbers with additional text and split
             elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer"):
                 split_line = line.split(" ", 1)
@@ -172,7 +175,8 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, pages: str, co
     if "Sprache" in loaded_json.keys():
         text_node.attrib["language"] = loaded_json["Sprache"].replace('  ', ' ')
     else:
-        text_node.attrib["language"] = detect_lang(filter_list)
+        # for bilingual cantons
+        text_node.attrib["language"] = detect_lang(filter_list, 10)
     if filename.endswith("nodate.html"):
         text_node.attrib["date"] = "0000-00-00"
     else:
@@ -233,9 +237,19 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, pages: str, co
     return tree
 
 
-def detect_lang(lines: List[str]) -> str:
+def detect_lang(lines: List[str], i) -> str:
     """Detects language of the string."""
-    return detect(max(lines)) if not max(lines) in "§.-$£~" else detect(sorted(lines, reverse=True)[1])
+    try:
+        return detect(max(lines)) if not max(lines) in "§.-$£~" and max(lines)[0] not in "[." and max(lines) != "…" else detect(sorted(lines, reverse=True)[1])
+    except:
+        try:
+            return detect(sorted(lines, reverse=True)[15])
+        except:
+            return ""
+
+
+
+
 
 def get_content_list(lines: List[str]) -> List[Tuple[str, str, str]]:
     """Extracts the content list into the following structure List[Tuple[number, title, page]] if the tuples are of
@@ -248,8 +262,8 @@ def get_content_list(lines: List[str]) -> List[Tuple[str, str, str]]:
 
 
 def main():
-    for filename in sorted(os.listdir(PATH_TO_DATA))[:2]:
-        if filename.endswith("pdf"):
+    for filename in sorted(os.listdir(PATH_TO_DATA))[2560:]:
+        if filename.endswith("pdf") and not filename.startswith("BE_VG_001_100-2018-319_2019-07-19") or filename.startswith("BE_VG_001_100-2018-332_2019-03-26"): # and filename.startswith("BE_VG_001_100-2013-247_2015-04-23"):
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
             # parse with tika library from separate script
             parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
@@ -263,6 +277,7 @@ def main():
             #             print(span.text)
             lines = split_lines(parsed_text)
             pages = get_pages(lines)
+            content_list = None
             if "Inhaltsübersicht" in parsed_text:
                 content_list = get_content_list(lines)
                 lines = lines[(lines.index("Sachverhalt:")):]
@@ -296,7 +311,7 @@ def main():
                         tree = build_xml_tree(filename, loaded_json, clean_text, pages)  # generates XML tree # removed footnotes argument
                     tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
                     ET.dump(tree)  # shows tree in console
-            print(content_list)
+            # print(content_list)
 
             print("\n===========================================================\n\n")
 
