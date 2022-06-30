@@ -4,8 +4,10 @@ import xml.etree.ElementTree as ET
 import re
 
 
+# use this file for files which do not name a date in their title or metainfo
+
 parser = argparse.ArgumentParser(description='extract_dates')
-parser.add_argument('-d','--directory',type=str,help='current directory for the scraper as path')
+parser.add_argument('-d','--directory',type=str,help='path to files')
 
 args = parser.parse_args()
 
@@ -27,6 +29,7 @@ def main():
     directory =  args.directory
     # for subdirectory in os.walk(directory):
     for filename in sorted(os.listdir(directory)): # change to subdirectory
+        print("hell")
         # print(directory)
         if "0000-00-00.xml" in filename: # and filename == "CH_BGE_001_BGE-121-I-267_0000-00-00.xml":
         # if filename == "CH_BGE_001_BGE-121-I-245_1995-07-05.xml":

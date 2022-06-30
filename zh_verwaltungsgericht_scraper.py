@@ -9,7 +9,7 @@ from typing import List
 import xml.etree.ElementTree as ET
 import json
 import re
-import unicodedata
+import unicodedata, itertools, sys
 from duplicate_checker import get_duplicates, check_pendants
 from helperscript import get_files_wo_pendant
 
@@ -27,11 +27,21 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/ZH_Verwaltungsgericht_clean
 
 ALLOWED_CLASSES = []
 
+
+
 absatz_pattern = r"^(\s)?[0-9]+\.([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
 absatz_pattern3 = r"([A-Z]{1,2}(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
+
+# preparation for removal of unprintable characters
+control_chars = ''.join(map(chr, itertools.chain(range(0x00,0x20), range(0x7f,0xa0))))
+control_char_re = re.compile(f'[{re.escape(control_chars)}].')
+
+def remove_unprintables(s):
+    """Remove all unprintable characters in the file."""
+    return control_char_re.sub("", s)
 
 def get_metadata(f):
     """Get metadata out of document."""
@@ -61,11 +71,11 @@ def parse_text(parsed_html) -> List[str]:
     tag_list = parsed_html.findAll(["p"])
     for i, tag in enumerate(tag_list):
         if tag.name == "table":
-            text.append(str(tag))
+            text.append(remove_unprintables(str(tag)))
             tag.clear()
         else:
             # it already strips the text snippet of whitespace characters
-            tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
+            tag_text = remove_unprintables(unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " "))
             if tag_text == "":
                 continue
             else:
@@ -170,7 +180,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
     if filename.endswith("nodate.html"):
         text_node.attrib["decade"] = "0000-00-00"
     else:
-        if "-" in loaded_json["Datum"]:
+        if loaded_json["Datum"][2] in str(range(10)):
             text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
         else:
             text_node.attrib["decade"] = loaded_json["Datum"][-4:-1] + "0"
@@ -237,7 +247,13 @@ def build_xml_wo_json(filename, metadata, filter_list, full_save_name):
     text_node.attrib["type"] = filename[:9]
     text_node.attrib["file"] = filename
     text_node.attrib["year"] = text_node.attrib["date"][-4:]
-    text_node.attrib["decade"] = text_node.attrib["date"][-4:-1] + "0"
+    if filename.endswith("nodate.html"):
+        text_node.attrib["decade"] = "0000-00-00"
+    else:
+        if text_node.attrib["date"][2] in str(range(10)):
+            text_node.attrib["decade"] = text_node.attrib["date"][:3] + "0"
+        else:
+            text_node.attrib["decade"] = text_node.attrib["date"][-4:-1] + "0"
     text_node.attrib["url"] = url
     body_node = ET.SubElement(text_node, "body")
     for para in filter_list:
@@ -264,7 +280,7 @@ def iterate_files(directory, filetype):
     for filename in sorted(os.listdir(directory)):
         # because 16 files (names of which are in this list) don't have a json-pendant:
         if filename[:-5] in files_wo_pendants:
-        #  if filename.endswith(filetype) and filename[:-5] not in files_wo_pendants:# and filename not in duplicate_list: # for files with json-pendant
+        # if filename.endswith(filetype) and filename[:-5] not in files_wo_pendants:# and filename not in duplicate_list: # for files with json-pendant
             fname = os.path.join(directory, filename)
             fname_json = os.path.join(directory, filename[:-5] + ".json")
             if filename.endswith("nodate.html"):
@@ -279,7 +295,7 @@ def iterate_files(directory, filetype):
                 metadata = get_metadata(f)
                 raw_text = get_main_part(f)
                 # print(raw_text)
-                beautifulSoupText = BeautifulSoup(raw_text, features="html.parser")  # read html; second argument to avoid warning - was not used on HTML with JSON pendant
+                beautifulSoupText = BeautifulSoup(raw_text, features="html.parser") # read html; second argument to avoid warning - was not used on HTML with JSON pendant
                 # print(beautifulSoupText)
                 text = parse_text(beautifulSoupText) # parses HTML
                 # print(text)
@@ -302,7 +318,6 @@ def iterate_files(directory, filetype):
 
 
 def main():
-
     iterate_files(PATH_TO_DATA+args.directory, args.type)
 
 

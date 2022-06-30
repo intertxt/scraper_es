@@ -1,4 +1,4 @@
-from bs4 import BeautifulSoup
+# from bs4 import BeautifulSoup
 import os
 import argparse
 import xml.etree.ElementTree as ET
@@ -13,8 +13,8 @@ ALLOWED_CLASSES = ["MsoTableGrid"]
 
 parser = argparse.ArgumentParser(description='generate clean XML-files from HTML-files')
 parser.add_argument('-p','--path_to_data',type=str,help="directory where all the different data is stored")
-parser.add_argument('-d','--directory',type=str,default='CH_BGE_clean',help='current directory for the scraper') ###
-parser.add_argument('-t','--type',type=str, default=".html", help="default filetype (html or xml usually)") ###
+parser.add_argument('-d','--directory',type=str,default='AG_Weitere',help='current directory for the scraper') ###
+parser.add_argument('-t','--type',type=str, default=".html", help="default filetype (html or xml usually)")
 
 args = parser.parse_args()
 
@@ -48,20 +48,23 @@ def get_files_w_tables(directory, filetype):
     counter = 0
     filename_list = []
     for filename in sorted(os.listdir(directory)):
-        if filename.endswith(filetype):
+        if filename.endswith(".xml"):
             fname = os.path.join(directory, filename)
             with open(fname, 'r', encoding='utf-8') as file:
                 if '<table' in file.read():
+                    return True
+                else:
+                    return False
                 # if re.search(r"^[1-9]\.[a-z]\)", file.read()):
                 #     match = re.search(r"^[1-9]\.[a-z]\)", file.read()).group(0)
                     #tree = ET.parse(os.path.join(directory, filename))
-                    counter += 1
+                    # counter += 1
                     #print(filename[:-4])
-                    filename_list.append(filename[:-5])
+                    # filename_list.append(filename[:-5])
                         # print('\n')
                         # # ET.dump(tree)
                         # print('\n')
-    print(filename_list, counter)
+    # print(filename_list, counter)
                         # print(filename, match)
                     # tree = ET.parse(os.path.join(directory, filename))
                     # root = tree.getroot()
@@ -75,17 +78,15 @@ def get_files_w_tables(directory, filetype):
 
 def get_missing_files(directory, filetype):
     counter = 0
-    dir_pre = set()
-    for filename in sorted(os.listdir(directory)):
-        dir_pre.add(filename[:-5]+".xml")
-    dir_post = set(sorted(os.listdir("/home/admin1/tb_tool/clean_scraper_data/VD_FindInfo_clean")))
-    missing_files = dir_pre-dir_post
-    missing_files = list(missing_files)
-    list_of_missing_filenames = []
-    for filename in missing_files:
-        filename = filename[:-4]+".html"
-        list_of_missing_filenames.append(filename)
-    return list_of_missing_filenames
+    dir_pre = set([filename.rsplit(".")[0]+".xml" for filename in sorted(os.listdir(directory))])
+    dir_post = set(sorted(os.listdir("/home/admin1/tb_tool/clean_scraper_data/AG_Weitere_clean")))
+    missing_files = dir_pre.difference(dir_post)
+    # missing_files = list(missing_files)
+    # list_of_missing_filenames = []
+    # for filename in missing_files:
+    #     filename = filename[:-4]+".html"
+    #     list_of_missing_filenames.append(filename)
+    return dir_pre-dir_post
 
 
 def get_files_wo_text(directory, filetype):
@@ -135,10 +136,10 @@ def main():
     # pass
     # print(get_files_wo_pendant("/home/admin1/tb_tool/scraping_data/ZH_Verwaltungsgericht"))
     # get_files_wo_pmark(PATH_TO_DATA+args.directory)
-    # get_files_w_tables(PATH_TO_DATA+args.directory, args.type)
-    # print(get_missing_files(PATH_TO_DATA+args.directory, args.type))
+    # print(get_files_w_tables(PATH_TO_DATA+args.directory, args.type))
+    print(get_missing_files(PATH_TO_DATA+args.directory, args.type))
     # print(get_files_wo_text(PATH_TO_DATA+args.directory, args.type))
-    print(get_missing_date_files(PATH_TO_DATA+args.directory))
+    # print(get_missing_date_files(PATH_TO_DATA+args.directory))
 
 
 if __name__ == '__main__':
