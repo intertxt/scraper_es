@@ -14,6 +14,7 @@ from duplicate_checker import get_duplicates
 from helperscript import get_files_wo_pmark
 import string
 
+# can be run with the following CLI prompt: python3.6 zh_sozialversicherung_scraper.py -p /home/admin1/tb_tool/scraping_data/
 
 parser = argparse.ArgumentParser(description="generate clean XML-files from HTML-files")
 parser.add_argument("-p","--path_to_data",type=str,help="directory where all the different data is stored")
@@ -28,9 +29,9 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/ZH_Sozialversicherungsgeric
 
 ALLOWED_CLASSES = []
 
-absatz_pattern = r"^(\s)?[0-9]+\.([a-z]\)|([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?)"
-absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-Z]{1,2}(\.|\))-?(\s[a-z]\))?|\s*([a-z]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+absatz_pattern = r"^(\s)?[0-9]{1,2}\.([a-z]\)|([0-9]{1,2}(\.)?)?(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?))?)"
+absatz_pattern2 = r"^(\s)?[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?"
+absatz_pattern3 = r"([A-Z]{1,2}(\.|\))-?(\s[a-z]\))?|\s*([a-h]{1,3}(\)|\.))+|\d{1,3}((\.\s)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.([\s]{1,2}([A-Z][a-z]+|März)|[0-9]{1,2}\.)\s?[1-9][0-9]{3}"
 false_marks = []
 
@@ -38,25 +39,21 @@ false_marks = []
 
 def parse_text(parsed_html) -> List[str]:
 	"""Get text out of HTML-files."""
-	# this part is for the 12895 files that had a different structure
-	if "<br/>" in str(parsed_html):
-		return unicodedata.normalize("NFKD", parsed_html.get_text(separator= "<br/>", strip=True)).replace("\t", " ").replace("\n", " ").replace("   ", " ").replace("  ", " ").split("<br/>")
-	else:
 	# this is for the files that are structured as "usual"
-		clean_text = []
-		tag_list = parsed_html.findAll(["table", "p" ])
-		for i, tag in enumerate(tag_list):
-			if tag.name == "table":
-				clean_text.append(str(tag))
-				tag.clear()
+	clean_text = []
+	tag_list = parsed_html.findAll(["table", "p" ])
+	for i, tag in enumerate(tag_list):
+		if tag.name == "table":
+			clean_text.append(str(tag))
+			tag.clear()
+		else:
+			# it already strips the text snippet of whitespace characters
+			tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
+			if tag_text == "":
+				continue
 			else:
-				# it already strips the text snippet of whitespace characters
-				tag_text = unicodedata.normalize('NFKD', tag.get_text()).replace("\n", " ").replace("  ", " ").replace("   ", " ").replace("     ", " ")
-				if tag_text == "":
-					continue
-				else:
-					tag_text = tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " ")
-					clean_text.append(tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " "))
+				tag_text = tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " ")
+				clean_text.append(tag_text.replace("  ", " ").replace("   ", " ").replace("     ", " "))
 		return clean_text
 
 
@@ -193,7 +190,7 @@ def iterate_files(directory, filetype):
 	fname_list = []
 	# files_wo_pmarks = set(get_files_wo_pmark("/home/admin1/tb_tool/clean_scraper_data/ZH_Sozialversicherungsgericht_clean"))
 	# for filename in list(difference(set(sorted(os.listdir(directory))), files_wo_pmarks))[:10]: ## see if this works once other zh_soz scraper is done
-	for filename in sorted(os.listdir(directory))[52500:]:
+	for filename in sorted(os.listdir(directory))[5800:]:
 		if filename.endswith(filetype):# and filename not in duplicate_list: ############
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
@@ -202,27 +199,57 @@ def iterate_files(directory, filetype):
 			else:
 				xml_filename = filename[:-5] + ".xml"
 			full_save_name = os.path.join(SAVE_PATH, xml_filename)
-			print("Current file name: ", os.path.abspath(fname), "will be converted into ", xml_filename)
-			print("\n")
+			# print("Current file name: ", os.path.abspath(fname), "will be converted into ", xml_filename)
+			# print("\n")
 			with open(fname, "r", encoding="utf-8") as file:  # open html file for reading
 				with open(fname_json, "r", encoding="utf-8") as json_file:  # open json file for reading
 					loaded_json = json.load(json_file)  # load json
-					beautifulSoupText = BeautifulSoup(file.read(), "html.parser")  # read html
-					# print(beautifulSoupText)
-					text = parse_text(beautifulSoupText) # parses HTML
-					# print(text)
-					# text_wo_hyphens = remove_hyphens(text)
-					paragraph_list = get_paragraphs(text)
-					# print(paragraph_list)
-					filter_list = list(filter(lambda x: x != ".", paragraph_list))  # removes periods elements
-					filter_list = list(filter(lambda x: x != "", filter_list)) # removes empty elements
-					filter_list = list(filter(lambda x: x != None, filter_list)) # removes elements of type None
-					filter_list = list(filter(lambda x: x != "-", filter_list))  # removes - elements
-					# print(filter_list)
-					tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
-					tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
-					ET.dump(tree) # shows tree in console
-					print("\n")
+					file_string = file.read()
+					# print(file_string)
+					if "<br>" in file_string or "java" in file_string: # this part is for the 12895 files that had a different structure
+						print(filename[:-5])
+					# 	beautifulSoupText = BeautifulSoup(file_string.replace("<br>", " ").replace("<br/>", " "), "html.parser")  # read html
+					# 	text = unicodedata.normalize('NFKD',beautifulSoupText.get_text())
+					# 	# for i, tag in enumerate(beautifulSoupText.findAll(["span"])):
+					# 	# 	text += unicodedata.normalize('NFKD', tag.get_text()) + " " if i < 30 and not unicodedata.normalize('NFKD', tag.get_text()).endswith(" ") else unicodedata.normalize('NFKD', tag.get_text())
+					# 	# print(text)
+					# 	split_text = re.split("    |\t|\n|   ", text)
+					# 	split_text = list(filter(lambda x: x != "", split_text))  # removes empty elements
+					# 	paragraph_list = split_text[:1]
+					# 	for snippet in split_text[1:]:
+					# 		if re.search(absatz_pattern[1:]+"$", snippet) or re.search(absatz_pattern2+"$", snippet) or re.search(absatz_pattern3+"$", snippet):
+					# 			if re.search(absatz_pattern[1:]+"$", snippet):
+					# 				match = re.search(absatz_pattern[1:]+"$", snippet).group(0)
+					# 			elif re.search(absatz_pattern2[1:]+"$", snippet):
+					# 				match = re.search(absatz_pattern2[1:]+"$", snippet).group(0)
+					# 			elif re.search(absatz_pattern3+"$", snippet):
+					# 				match = re.search(absatz_pattern3 + "$", snippet).group(0)
+					# 			if snippet[:-len(match)].endswith("Sachverhalt:"):
+					# 				paragraph_list.append(snippet[:-(len(match)+len("Sachverhalt:"))].strip())
+					# 				paragraph_list.append("Sachverhalt:")
+					# 				paragraph_list.append(match.strip())
+					# 			else:
+					# 				paragraph_list.append(snippet[:-len(match)].strip())
+					# 				paragraph_list.append(match.strip())
+					# 		else:
+					# 			paragraph_list.append(snippet.strip())
+					# 	# print(paragraph_list)
+					# else: # this is for the "normal" files
+					# 	beautifulSoupText = BeautifulSoup(file.read(), "html.parser")  # read html
+					# 	text = parse_text(beautifulSoupText)  # parses HTML
+					# 	paragraph_list = get_paragraphs(text)
+					# # text_wo_hyphens = remove_hyphens(text)
+					# # print(paragraph_list)
+					# filter_list = list(filter(lambda x: x != ".", paragraph_list))  # removes periods elements
+					# filter_list = list(filter(lambda x: x != "", filter_list)) # removes empty elements
+					# filter_list = list(filter(lambda x: x != None, filter_list)) # removes elements of type None
+					# filter_list = list(filter(lambda x: x != "-", filter_list))  # removes - elements
+					# filter_list = list(filter(lambda x: x != "   \n\n\n\n\n\n\n\n\n\n\n\n\n", filter_list))  # removes - elements
+					# # print(filter_list)
+					# tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
+					# tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
+					# ET.dump(tree) # shows tree in console
+					# print("\n")
 					# counter += 1
 					# print(counter)
 
