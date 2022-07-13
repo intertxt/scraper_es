@@ -16,7 +16,6 @@ from typing import List, Tuple
 import json
 from langdetect import detect
 
-
 arg_parser = argparse.ArgumentParser(description="extract Text from PDF-files")
 arg_parser.add_argument("-p", "--path_to_data", type=str, help="path to the folder containing PDFs")
 arg_parser.add_argument("-s", "--save_folder", type=str, help="name of the folder where the text is to be saved")
@@ -32,7 +31,7 @@ GERICHTE = ["ABS", "BK", "ZK", "HG", "SK", "KES", "WSG"]
 
 absatz_pattern = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
 absatz_pattern2 = r"^(\s)?[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?\s-\s[0-9]+\.([0-9]+(\.)?)*(\s-\s[0-9]+\.([0-9]+(\.)?)*)?"
-absatz_pattern3 = r"([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,3}((\.\s)|([a-z]{1,3}\)\.?)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,3}\.)"
+absatz_pattern3 = r"([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,3}((\.\s)|([a-z]{1,3}\)\.?)|(\s[a-z]\)))|§.*:|[a-z]\)(\s[a-h]\){1,2}\))?|\d{1,3}\.)"
 datum_pattern = r"[0-9][0-9]?\.(\s?(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)|([0-9]{2}\.))"
 false_marks = []
 
@@ -44,6 +43,12 @@ def split_lines(parsed_text: str) -> List[str]:
 ################ for ZK only #################
 def split_lines_zk(parsed_text: str) -> List[str]:
     split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "").replace("\n", "").replace("   ", " ") for line in parsed_text.split("\n\n")]
+    return split_lines
+##############################################
+
+################ for SK only #################
+def split_lines_sk(parsed_text: str) -> List[str]:
+    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "").replace("\n", "").replace("   ", " ") for line in parsed_text.split("\n")]
     return split_lines
 ##############################################
 
@@ -72,6 +77,14 @@ def get_footnotes(lines: List[str]) -> dict[str: str]:
             else:
                 continue
             if int(fn_num) - 1 == last_num:
+
+                ### this works for footnotes over multiple lines in SK
+                for j in range(1, 10):
+                    if lines[i+j]:
+                        fn_text += " "+lines[i+j]
+                    else: break
+                ###
+
                 footnotes[fn_num] = fn_text
                 last_num = int(fn_num)
                 lines[i] = ""
@@ -98,11 +111,12 @@ def get_paras(lines: List[str]) -> List[str]:
     sachverhalt_counter = 0
     begr_counter = 0
     name_pattern = r"[A-Z]\._{8}"
+    klagerin_pattern = r"[A-Z]\.Klägerin\s\d"
 
     for i, line in enumerate(lines):
         line = line.strip()
         # get start of main text
-        if ("Erwägungen" in line or "Sachverhalt" in line or "Rekurs" in line or "Regeste") and sachverhalt_counter == 0:
+        if ("Erwägungen" in line or "Sachverhalt" in line or "Rekurs" in line or "Regeste" in line) and sachverhalt_counter == 0:
             clean_lines.append(line.strip())
             sachverhalt_counter += 1
             continue
@@ -117,6 +131,13 @@ def get_paras(lines: List[str]) -> List[str]:
                     clean_lines.append(para.strip())
                     para = ""
                 clean_lines.append(line)
+
+            # get Klägerin lines (for HG)
+            elif re.fullmatch(klagerin_pattern, line):
+                if para:
+                    clean_lines.append(para.strip())
+                    para = ""
+                clean_lines.append(line[:2]+" "+line[2:])
 
             # match pure paragraph numbers
             elif (re.fullmatch(absatz_pattern, line) or re.fullmatch(absatz_pattern2, line) or re.fullmatch(absatz_pattern3, line)) and not re.fullmatch(datum_pattern, line):
@@ -166,17 +187,6 @@ def get_paras(lines: List[str]) -> List[str]:
 
             # remove hyphens at the end of lines if next text is lowercased
             elif line:
-                # if pm_counter == 0:
-                #     if line.endswith("-"):  # and lines[i+2] and line[i+2][0].islower():
-                #         para += line[:-1]
-                #     else:
-                #         if para:
-                #             para += line
-                #             clean_lines.append(para)
-                #             para = ""
-                #         else:
-                #             clean_lines.append(line)
-                # else:
                 if re.match(r".*\w+-$", line):
                     para += line[:-1]
                 else:
@@ -284,16 +294,26 @@ def detect_lang(lines: List[str]) -> str:
 def main():
     footnotes = None
     pages = None
-    for gericht in GERICHTE[2:3]:
+    for gericht in GERICHTE:
         for filename in sorted(os.listdir(PATH_TO_DATA)):
-            if filename.endswith("pdf") and gericht in filename and "BE_OG_001_ZK-1995-1065_2008-07-24" in filename:#"BE_OG_008_BK-2009-365_2009-12-30" in filename: #"BE_OG_007_ABS-2008-42_2008-05-07" in filename:
+            if filename.endswith("pdf") and gericht in filename: # and ("BE_OG_999_WSG-2006-12_2007-09-03" in filename \
+                    # or "BE_OG_001_KES-2013-553_2013-10-25" in filename or "BE_OG_005_SK-2005-401_2007-12-04" in filename \
+                    # or"BE_OG_002_HG-2008-52_2009-07-07" in filename or "BE_OG_001_ZK-1995-1065_2008-07-24" in filename \
+                    # or "BE_OG_008_BK-2009-365_2009-12-30" in filename or "BE_OG_007_ABS-2008-42_2008-05-07" in filename):
                 print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
+
                 # parse with tika library from separate script
                 parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
-                lines = split_lines_zk(parsed_text) if gericht == "ZK" else split_lines(parsed_text)
-                if not gericht in ["ABS", "ZK"]:
+                if gericht == "ZK":
+                    lines = split_lines_zk(parsed_text)
+                elif gericht in ["SK", "KES", "WSG"]:
+                    lines = split_lines_sk(parsed_text)
+                else: lines = split_lines(parsed_text)
+
+                # since not all files contain page numbers or footnotes differentiation is made here
+                if not gericht in ["ABS", "ZK", "HG", "KES"]:
                     pages = get_pages(lines)
-                    if not gericht in ["BK"]:
+                    if not gericht in ["BK", "WSG"]:
                         footnotes = get_footnotes(lines)
                 clean_text = get_paras(lines)
 
