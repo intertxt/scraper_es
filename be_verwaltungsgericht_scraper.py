@@ -248,9 +248,6 @@ def detect_lang(lines: List[str], i) -> str:
             return ""
 
 
-
-
-
 def get_content_list(lines: List[str]) -> List[Tuple[str, str, str]]:
     """Extracts the content list into the following structure List[Tuple[number, title, page]] if the tuples are of
     smaller size than 3, they might be titles or appendices."""
