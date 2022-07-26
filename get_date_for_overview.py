@@ -13,7 +13,7 @@ from typing import List
 import datetime
 
 parser = argparse.ArgumentParser(description="extract the earliest and lates filedate out of folder")
-parser.add_argument("-p", "--path_to_data", type=str, help="directory with all directories that contain files")
+parser.add_argument("-p", "--path_to_data", type=str, help="directory that contains clean files")
 
 args = parser.parse_args()
 
@@ -34,18 +34,16 @@ def format_date(date_string: str) -> List[int]:
 
 
 def main():
-    path_to_data = args.path_to_data
-    print(sorted(os.listdir(path_to_data)))
-    for directory in sorted(os.listdir(path_to_data)):
-        print(directory)
-        directory_dates = []
-        for file in sorted(os.listdir(path_to_data+directory)):
-            tree = ET.parse(path_to_data+"/"+directory+"/"+file)
-            root = tree.getroot()
-            # print(file)
-            if format_date(root.attrib["date"]): directory_dates.append(format_date(root.attrib["date"]))
-        print(f"earliest date: {min(directory_dates)}")
-        print(f"latest date: {max(directory_dates)}\n")
+    directory = args.path_to_data
+    directory_dates = []
+    for file in sorted(os.listdir(directory)):
+        tree = ET.parse(directory+"/"+file)
+        root = tree.getroot()
+        # print(file)
+        if format_date(root.attrib["date"]): directory_dates.append(format_date(root.attrib["date"]))
+    print(directory.split("/")[2])
+    print(f"earliest date: {min(directory_dates)}")
+    print(f"latest date: {max(directory_dates)}\n")
 
 
 if __name__ == "__main__":
