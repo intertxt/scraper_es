@@ -104,7 +104,7 @@ def get_paras(lines: List[str]) -> List[str]:
                 continue
 
         # get start of main text 
-        if "fait" in line or "f a i t" in line or "attendu" in line or "in Anbetracht dessen," in line or "Sachverhalt" in line:
+        if "fait" in line or "f a i t" in line or "attendu" in line or "in Anbetracht dessen," in line or "Sachverhalt" in line or "considérant" in line:
             clean_lines.append(line.strip())
             sachverhalt_counter += 1
             continue
