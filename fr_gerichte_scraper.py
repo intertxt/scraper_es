@@ -28,9 +28,9 @@ PATH_TO_DATA = "/home/admin1/tb_tool/scraping_data/"+args.path_to_data # Gericht
 SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/"+args.save_folder # Gerichtname_clean
 
 
-absatz_pattern = r"^(\s)?[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s"
-absatz_pattern2 = r"^(\s)?[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s"
-absatz_pattern3 = r"([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,2}((\.\s)|([a-z]{1,2}\)\.?)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,2}\.)\s"
+absatz_pattern = r"^(\s)?[0-9]{1,2}\.\s\w\)"
+absatz_pattern2 = r"^(\s)?[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?"
+absatz_pattern3 = r"([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,2}((\.\s)|([a-z]{1,2}\)\.?)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,2}\.)"
 datum_pattern = r"[0-9][0-9]?\.(\s?(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)|([0-9]{2}\.))"
 false_marks = []
 
@@ -104,7 +104,7 @@ def get_paras(lines: List[str]) -> List[str]:
                 continue
 
         # get start of main text 
-        if "fait" in line or "f a i t" in line or "attendu" in line or "in Anbetracht dessen," in line or "Sachverhalt" in line or "considérant" in line:
+        if "fait" in line or "f a i t" in line or "attendu" in line or "in Anbetracht dessen," in line or "Sachverhalt" in line or "considérant" in line or "S a c h v e r h a l t" in line:
             clean_lines.append(line.strip())
             sachverhalt_counter += 1
             continue
@@ -121,7 +121,7 @@ def get_paras(lines: List[str]) -> List[str]:
                 clean_lines.append(line)
 
             # match pure paragraph numbers
-            elif (re.fullmatch(absatz_pattern, line) or re.fullmatch(absatz_pattern2, line) or re.fullmatch(absatz_pattern3, line)) and not re.fullmatch(datum_pattern, line):
+            elif (re.fullmatch(absatz_pattern, line) or re.fullmatch(absatz_pattern2, line) or re.fullmatch(absatz_pattern3, line)) and not re.fullmatch(datum_pattern, line) and not re.match("^\w\._+", line):
                 if para:
                     clean_lines.append(para.strip())
                     para = ""
@@ -129,14 +129,17 @@ def get_paras(lines: List[str]) -> List[str]:
                 pm_counter += 1
 
             # match paragraph numbers with additional text and split
-            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer"):
-                line = line.split(" ", 1)
+            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer") and not re.match("^\w\._+", line):
+                if re.match(absatz_pattern, line): match = re.match(absatz_pattern, line).group(0)
+                elif re.match(absatz_pattern2, line): match = re.match(absatz_pattern2, line).group(0)
+                else: match = re.match(absatz_pattern3, line).group(0)
+                # line = line.split(" ", 1)
                 if para:
                     clean_lines.append(para.strip())
                     para = ""
-                clean_lines.append(line[0])
-                if len(line) > 1:
-                    para += line[1][:-1] if re.match(r".*\w+-$", line[1]) else line[1]+" "
+                clean_lines.append(match)
+                # if len(line) > 1:
+                para += line[len(match):] if re.match(r".*\w+-$", line[1]) else line[len(match):]+" "
                 pm_counter += 1
 
             # remove links which are not visible in pdf
@@ -285,7 +288,7 @@ def main():
             else:
                 xml_filename = filename[:-4] + ".xml"
 
-            # open json pendant
+            # # open json pendant
             json_name = filename[:-3]+"json"
             if json_name in sorted(os.listdir(PATH_TO_DATA)):
                 with open(os.path.join(PATH_TO_DATA, json_name), "r", encoding="utf-8") as json_file:
