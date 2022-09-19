@@ -37,12 +37,32 @@ datum_pattern = r"[0-9][0-9]?\.(\s?(Januar|Februar|März|April|Mai|Juni|Juli|Aug
 false_marks = []
 
 def split_lines(parsed_text: str) -> List[str]:
-    split_lines = [line.strip().replace(" ", " ").replace("\uf02d", "").replace(" ", "").replace("\xa0\xa0\xa0\xa0\xa0\xa0", "").replace("\xa0", "") for line in parsed_text.split("\n")]
+    split_lines = [line.strip().replace(" ", " ").replace("\uf02d", "").replace(" ", "").replace("\xa0\xa0\xa0\xa0\xa0\xa0", "").replace("\xa0", "").replace(" &gt;", "") for line in parsed_text.split("\n")]
     return split_lines
 
 
 def get_pages_eg(lines: List[str]) -> str | None:
     pages = [lines.pop(lines.index(line)).strip("- ") for line in lines if line.startswith("-") and line.endswith("-")]
+    if pages:
+        if pages[0] == "2": pages[0] = "1"
+        return f"{pages[0]}–{pages[-1]}"
+    else:
+        return ""
+
+
+def get_pages_kg(lines: List[str]) -> str | None:
+    page_pattern = r"Seite\s\d{1,3}\s{3}http://www.bl.ch/kantonsgericht$"
+    pages = [lines.pop(lines.index(line)).split()[1] for line in lines if re.fullmatch(page_pattern, line)]
+    if pages:
+        if pages[0] == "2": pages[0] = "1"
+        return f"{pages[0]}–{pages[-1]}"
+    else:
+        return ""
+
+
+def get_pages_sg(lines: List[str]) -> str | None:
+    page_pattern = r"Seite\s\d{1,3}$"
+    pages = [lines.pop(lines.index(line)).split()[1] for line in lines if re.fullmatch(page_pattern, line)]
     if pages:
         if pages[0] == "2": pages[0] = "1"
         return f"{pages[0]}–{pages[-1]}"
@@ -159,6 +179,176 @@ def get_paras(lines: List[str]) -> List[str]:
 
     return clean_lines
 
+def get_paras_kg(lines: List[str]) -> List[str]:
+    clean_lines = []
+    para = ""
+    pm_counter = 0
+    sachverhalt_counter = 0
+    headnote_counter = 0
+
+    for i, line in enumerate(lines):
+        line = line.strip()
+
+        # get start of main text
+        if re.match(r"A(\.\s+|$)", line) and sachverhalt_counter == 0:
+            if re.fullmatch(r"A(\.\s+|$)", line):
+                match = re.fullmatch(r"A(\.\s+|$)", line).group(0)
+                clean_lines.append(match)
+            else:
+                match = re.match(r"A\.\s+", line).group(0)
+                clean_lines.append(match)
+                if re.match(r".*\w+-$", line):
+                    para += line[len(match):-1]
+                else:
+                    para += line[len(match):] + " "
+            sachverhalt_counter += 1
+            continue
+
+        if sachverhalt_counter == 0 and line:
+            clean_lines.append(line.strip())
+
+        else:
+            # # get footnote reference in text
+            # if line and line[0].isdigit() and line[-1].isdigit() and lines[i - 1]:
+            #     if para:
+            #         clean_lines.append(para.strip())
+            #         para = ""
+            #     clean_lines.append(line)
+
+            # match pure paragraph numbers
+            if (re.fullmatch(absatz_pattern[:-2], line) or re.fullmatch(absatz_pattern2[:-2], line) or re.fullmatch(absatz_pattern3[:-2], line) or re.fullmatch(r"[A-Z]$", line) or line.startswith("Erwägungen")) and not re.fullmatch(datum_pattern, line) and not re.match("^\w\._+", line):
+                if para:
+                    clean_lines.append(para.strip())
+                    para = ""
+                clean_lines.append(line)
+                pm_counter += 1
+
+            elif "http.//www.bl.ch/zmg" in line:
+                continue
+
+            # match paragraph numbers with additional text and split
+            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line):
+                if re.match(absatz_pattern, line): match = re.match(absatz_pattern, line).group(0)
+                elif re.match(absatz_pattern2, line): match = re.match(absatz_pattern2, line).group(0)
+                else: match = re.match(absatz_pattern3, line).group(0)
+                # line = line.split(" ", 1)
+                # if para and para[-1] not in ".:)]!?":
+                #     if re.match(r".*\w+-$", line):
+                #         para += line[:-1]
+                #         continue
+                #     else:
+                #         para += line + " "
+                #         continue
+                if para:
+                    clean_lines.append(para.strip())
+                    para = ""
+
+                clean_lines.append(match.strip())
+                # if len(line) > 1:
+                para += line[len(match):] if re.match(r".*\w+-$", line[1]) else line[len(match):]+" "
+                pm_counter += 1
+
+            # remove links which are not visible in pdf
+            elif line.startswith("http"):
+                continue
+
+            # remove hyphens at the end of lines if next text is lowercased
+            elif line:
+                if re.match(r".*\w+-$", line):
+                    para += line[:-1]
+                else:
+                    para += line+" "
+
+    # if para is not an empty string it is appended to the clean_lines list
+    if para:
+        clean_lines.append(para.strip())
+        para = ""
+
+    return clean_lines
+
+
+def get_paras_sg(lines: List[str]) -> List[str]:
+    clean_lines = []
+    para = ""
+    pm_counter = 0
+    sachverhalt_counter = 0
+    headnote_counter = 0
+
+    for i, line in enumerate(lines):
+        line = line.strip()
+
+        # get start of main text
+        if  ("nachdem sich ergeben" in line or "Sachverhalt" in line):
+            clean_lines.append(line.strip())
+            sachverhalt_counter += 1
+            continue
+
+        if sachverhalt_counter == 0 and line:
+            clean_lines.append(line.strip())
+
+        else:
+            # # get footnote reference in text
+            # if line and line[0].isdigit() and line[-1].isdigit() and lines[i - 1]:
+            #     if para:
+            #         clean_lines.append(para.strip())
+            #         para = ""
+            #     clean_lines.append(line)
+
+            # match pure paragraph numbers
+            if (re.fullmatch(absatz_pattern[:-2], line) or re.fullmatch(absatz_pattern2[:-2], line) or re.fullmatch(
+                    absatz_pattern3[:-2], line)) and not re.fullmatch(datum_pattern, line) and not re.match("^\w\._+",
+                                                                                                            line):
+                if para:
+                    clean_lines.append(para.strip())
+                    para = ""
+                clean_lines.append(line)
+                pm_counter += 1
+
+            # match paragraph numbers with additional text and split
+            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3,
+                                                                                                line)) and not re.match(
+                    datum_pattern, line):
+                if re.match(absatz_pattern, line):
+                    match = re.match(absatz_pattern, line).group(0)
+                elif re.match(absatz_pattern2, line):
+                    match = re.match(absatz_pattern2, line).group(0)
+                else:
+                    match = re.match(absatz_pattern3, line).group(0)
+                # line = line.split(" ", 1)
+                # if para and para[-1] not in ".:)]!?":
+                #     if re.match(r".*\w+-$", line):
+                #         para += line[:-1]
+                #         continue
+                #     else:
+                #         para += line + " "
+                #         continue
+                if para:
+                    clean_lines.append(para.strip())
+                    para = ""
+
+                clean_lines.append(match.strip())
+                # if len(line) > 1:
+                para += line[len(match):] if re.match(r".*\w+-$", line[1]) else line[len(match):] + " "
+                pm_counter += 1
+
+            # remove links which are not visible in pdf
+            elif line.startswith("http"):
+                continue
+
+            # remove hyphens at the end of lines if next text is lowercased
+            elif line:
+                if re.match(r".*\w+-$", line):
+                    para += line[:-1]
+                else:
+                    para += line + " "
+
+    # if para is not an empty string it is appended to the clean_lines list
+    if para:
+        clean_lines.append(para.strip())
+        para = ""
+
+    return clean_lines
+
 
 def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None, pages=None):
     """Build an XML-tree."""
@@ -232,7 +422,7 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None
         #             fn_node.text = f"{num}, {fn}"
         #             break
         #     continue
-        elif re.fullmatch(absatz_pattern3[:-2], para) or re.fullmatch(absatz_pattern2[:-2], para) or re.fullmatch(absatz_pattern[:-2], para):
+        elif re.fullmatch(absatz_pattern3[:-2], para) or re.fullmatch(absatz_pattern2[:-2], para) or re.fullmatch(absatz_pattern[:-2], para) or re.fullmatch(r"[A-Z]$", para) or para == "A.":
             p_node.attrib["type"] = "paragraph_mark"
         elif para.startswith("<table"):
             p_node.attrib["type"] = "table"
@@ -270,7 +460,7 @@ def parse_pdftotree(filename:str) -> list[str]:
 
 def main():
     for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and filename.startswith("BL_EG_001_11-005_2011-03-31") and not "nodate" in filename and not "StGer" in filename:
+        if filename.endswith("pdf") and not "nodate" in filename and not "StGer" in filename:
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
 
             # parse with tika library from separate script
@@ -283,8 +473,23 @@ def main():
             
             if filename.startswith("BL_EG"):
                 pages = get_pages_eg(lines)
-            # footnotes = get_footnotes(lines)
-            clean_text = get_paras(lines)
+                # footnotes = get_footnotes(lines)
+                clean_text = get_paras(lines)
+
+            elif filename.startswith("BL_KG"):
+                pages = get_pages_kg(lines)
+                # footnotes = get_footnotes(lines)
+                clean_text = get_paras_kg(lines)
+
+            elif filename.startswith("BL_SG"):
+                pages = get_pages_sg(lines)
+                # footnotes = get_footnotes(lines)
+                clean_text = get_paras_sg(lines)
+
+            elif filename.startswith("BL_ZMG"):
+                pages = get_pages_sg(lines)
+                # footnotes = get_footnotes(lines)
+                clean_text = get_paras_kg(lines)
 
             # create new filenames for the xml files
             if filename.endswith("nodate.html"):
@@ -297,7 +502,7 @@ def main():
             if json_name in sorted(os.listdir(PATH_TO_DATA)):
                 with open(os.path.join(PATH_TO_DATA, json_name), "r", encoding="utf-8") as json_file:
                     loaded_json = json.load(json_file)  # load json
-                    tree = build_xml_tree(filename, loaded_json, clean_text)  # generates XML tree
+                    tree = build_xml_tree(filename, loaded_json, clean_text, pages=pages)  # generates XML tree
                     tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
                     ET.dump(tree)  # shows tree in console
 
