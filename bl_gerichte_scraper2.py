@@ -190,17 +190,30 @@ def get_paras_kg(lines: List[str]) -> List[str]:
         line = line.strip()
 
         # get start of main text
-        if re.match(r"A(\.\s+|$)", line) and sachverhalt_counter == 0:
-            if re.fullmatch(r"A(\.\s+|$)", line):
-                match = re.fullmatch(r"A(\.\s+|$)", line).group(0)
+        if (re.match(r"A(\.1?\.?\s+|$)", line) or re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line) or "Sachverhalt" in line or "S a c h v e r h a l t :" in line or "Nichtanhandnahme des Verfahrens" in line or "Strafprozessrecht" in line or "i n  E r w ä g u n g" in line or "In Erwägung" in line) and sachverhalt_counter == 0:
+            match = None
+            if re.fullmatch(r"A(\.1?\.?\s+|$)", line):
+                match = re.fullmatch(r"A(\.1?\.?\s+|$)", line).group(0)
                 clean_lines.append(match)
-            else:
-                match = re.match(r"A\.\s+", line).group(0)
+            if re.match(absatz_pattern, line):
+                match = re.match(absatz_pattern, line).group(0)
+            elif re.match(absatz_pattern2, line):
+                match = re.match(absatz_pattern2, line).group(0)
+            elif re.match(absatz_pattern3, line):
+                match = re.match(absatz_pattern3, line).group(0)
+            elif re.match(r"A(\.1?\.?\s+|$)", line):
+                match = re.match(r"A(\.1?\.?\s+|$)", line).group(0)
+            if match:
                 clean_lines.append(match)
                 if re.match(r".*\w+-$", line):
                     para += line[len(match):-1]
                 else:
                     para += line[len(match):] + " "
+            else:
+                if re.match(r".*\w+-$", line):
+                    para += line[:-1]
+                else:
+                    para += line+" "
             sachverhalt_counter += 1
             continue
 
@@ -278,7 +291,7 @@ def get_paras_sg(lines: List[str]) -> List[str]:
         line = line.strip()
 
         # get start of main text
-        if  ("nachdem sich ergeben" in line or "Sachverhalt" in line):
+        if  ("nachdem sich ergeben" in line or "Sachverhalt" in line or "Sachverhalt" in line or "S a c h v e r h a l t :" in line or "In   E r w ä g u n g" in line or "In Erwägung" in line or "I n    E r w ä g u n g :" in line or "In   Erwägung:" in line or "In" in line) and sachverhalt_counter == 0:
             clean_lines.append(line.strip())
             sachverhalt_counter += 1
             continue
@@ -422,7 +435,7 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None
         #             fn_node.text = f"{num}, {fn}"
         #             break
         #     continue
-        elif re.fullmatch(absatz_pattern3[:-2], para) or re.fullmatch(absatz_pattern2[:-2], para) or re.fullmatch(absatz_pattern[:-2], para) or re.fullmatch(r"[A-Z]$", para) or para == "A.":
+        elif re.fullmatch(absatz_pattern3[:-2], para) or re.fullmatch(absatz_pattern2[:-2], para) or re.fullmatch(absatz_pattern[:-2], para) or re.fullmatch(r"[A-Z]$", para) or para.strip() == "A.":
             p_node.attrib["type"] = "paragraph_mark"
         elif para.startswith("<table"):
             p_node.attrib["type"] = "table"
@@ -459,12 +472,18 @@ def parse_pdftotree(filename:str) -> list[str]:
 
 
 def main():
+    faulty_files = []
     for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and not "nodate" in filename and not "StGer" in filename:
+        if filename.endswith("pdf") and not "nodate" in filename and not "StGer" in filename and not filename.startswith("BL_KG_001_2015-09-03-sv-4_2015-09-03"):
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
 
             # parse with tika library from separate script
             parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
+
+            # filter out faulty files
+            if "404 - Die Seite wurde nicht gefunden" in parsed_text:
+                faulty_files.append(filename)
+                continue
 
             # parse with pdftotree library
             # lines = parse_pdftotree(filename)
@@ -517,6 +536,11 @@ def main():
 
 
             print("\n===========================================================\n\n")
+
+
+    print(f"There were {len(faulty_files)} faulty files found in this folder, which contain an error message within the text.\n"
+          f"The following list names all those files:")
+    print(faulty_files)
 
 
 if __name__ == "__main__":
