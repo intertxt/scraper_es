@@ -30,18 +30,81 @@ SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/"+args.save_folder # Gerich
 
 absatz_pattern = r"^(((\s)?[0-9]{1,2}\.(\/)?)?((\s)?[a-z]\))+|[0-9]{1,2}\.(\/)?([0-9]{1,2}(\.)?)*)\s"
 absatz_pattern2 = r"^[0-9]{1,2}\.(\/)?([0-9]{1,2}(\.)?)*\s"
-absatz_pattern3 = r"^((\s)?[A-Z]\.(\/)?((\s)?[a-z])*|[IVD]{1,4}\.)\s"
+absatz_pattern3 = r"^((\s)?[A-D]\.(\/)?((\s)?[a-z])*|[IVD]{1,4}\.)\s"
 datum_pattern = r"[0-9][0-9]?\.(\s?(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)|([0-9]{2}\.))"
 false_marks = []
 
 def split_lines(parsed_text: str) -> List[str]:
-    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "").replace("\xa0\xa0\xa0\xa0\xa0\xa0", "").replace("\xa0", "") for line in parsed_text.split("\n")]
+    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "").replace("\uf0a7 ", "").replace("\xa0", "") for line in parsed_text.split("\n")]
     return split_lines
 
 
+def get_content_list(lines: List[str]) -> List[Tuple[str, str, str]]:
+    """Extracts the content list into the following structure List[Tuple[number, title, page]] if the tuples are of
+    smaller size than 3, they might be titles or appendices."""
+    start_index = [lines.index(line) for line in lines if re.match(r"Verwaltungs\-\sund\sGerichtsentscheide\s+1", line)][0] -1
+    end_index = [lines.index(line) for line in lines if re.match(r"\d\.\s+Gerichte\s+\d{1,3}", line)][0] + 1
+    content_list = [lines.pop(lines.index(line)).split() for line in lines[start_index:end_index]]
+    pretty_content_list = []
+    for line in content_list:
+        if line:
+            if line[0] == 'Verwaltungs-':
+                pretty_content_list.append((" ".join(line[0:3]), line[3]))
+            else:
+                pretty_content_list.append(tuple(line))
+
+
+    return pretty_content_list
+
+
+def get_content_list_gb(lines: List[str]) -> List[Tuple[str, str, str]]:
+    """Extracts the content list into the following structure List[Tuple[number, title, page]] if the tuples are of
+    smaller size than 3, they might be titles or appendices."""
+    content_pages = [line for line in lines if re.fullmatch(r"[IVX]{1,3}\s-\s[IVX]{1,3}", line)]
+    start_index = [lines.index(line) for line in lines if re.match(r"^Inhaltsverzeichnis$", line)][0] - 1
+    end_index = [lines.index(line) for line in lines if re.match(r"^\d{1,3}\s-\s\d{1,3}(\sAI\s.*)?$", line)][0] - 1
+    content_list = [lines.pop(lines.index(line)).split(".") for line in lines[start_index:end_index]]
+    content_list = list(filter(lambda x: x != [], content_list))
+    clean_content = []
+    for line in content_list:
+        if line and not re.fullmatch(r"[IVX]{1,3}\s-\s[IVX]{1,3}", line[0]) and not re.match(r"^Geschäftsbericht\s\d{4}$", line[0]):
+            clean_elem = []
+            for elem in line:
+                if elem:
+                    clean_elem.append(elem.strip())
+            if clean_elem:
+                clean_content.append(clean_elem)
+
+    pretty_content_list = []
+    for line in clean_content:
+        if line:
+            if line[0] == 'Inhaltsverzeichnis':
+                pretty_content_list.append(line[0])
+            elif len(line) == 2:
+                tup = (line[0].split(" ", 1).append(line[1]))
+                if tup:
+                    tup = tuple(filter(lambda x: x != "", tup))
+                    pretty_content_list.append(tup)
+            else:
+                pretty_content_list.append(tuple(line))
+    pretty_content_list = list(filter(lambda x: x != None, pretty_content_list))
+
+    return pretty_content_list
+
+
 def get_pages(lines: List[str]) -> str | None:
-    page_pattern = r"Kantonsgericht\sSchwyz\s\d{1,3}"
-    pages = [lines.pop(lines.index(line)).rsplit(" ")[-1] for line in lines if re.fullmatch(page_pattern, line)]
+    pages = [lines.pop(lines.index(line)) for line in lines if line.isdigit() and len(line)<4]
+    if pages:
+        if pages[0] == "2": pages[0] = "1"
+        return f"{pages[0]}–{pages[-1]}"
+    else:
+        return ""
+
+
+def get_pages_gb(lines: List[str]) -> str | None:
+    page_pattern = r"^\d{1,3}\s-\s\d{1,3}(\sAI\s.*)?$"
+    content_pages = [lines.pop(lines.index(line)) for line in lines if re.fullmatch(r"[IVX]{1,3}\s-\s[IVX]{1,3}", line)]
+    pages = [lines.pop(lines.index(line)).split()[0] for line in lines if re.fullmatch(page_pattern, line)]
     if pages:
         if pages[0] == "2": pages[0] = "1"
         return f"{pages[0]}–{pages[-1]}"
@@ -89,6 +152,7 @@ def get_paras(lines: List[str]) -> List[str]:
     pm_counter = 0
     sachverhalt_counter = 1
     headnote_counter = 0
+    headnote_pattern = r"^Geschäftsbericht\s\d{4}$"
 
     for i, line in enumerate(lines):
         line = line.strip()
@@ -98,6 +162,13 @@ def get_paras(lines: List[str]) -> List[str]:
         #     clean_lines.append(line.strip())
         #     sachverhalt_counter += 1
         #     continue
+
+        # extract headnotes all but the first
+        if re.fullmatch(headnote_pattern, line) and headnote_counter == 0:
+            clean_lines.append(line.strip())
+            headnote_counter += 1
+        elif re.fullmatch(headnote_pattern, line):
+            continue
 
         if sachverhalt_counter == 0 and line:
             clean_lines.append(line.strip())
@@ -110,6 +181,7 @@ def get_paras(lines: List[str]) -> List[str]:
             #         para = ""
             #     clean_lines.append(line)
 
+
             # match pure paragraph numbers
             if (re.fullmatch(absatz_pattern[:-2], line) or re.fullmatch(absatz_pattern2[:-2], line) or re.fullmatch(absatz_pattern3[:-2], line)) and not re.fullmatch(datum_pattern, line) and not re.match("^\w\._+", line):
                 if para:
@@ -119,7 +191,7 @@ def get_paras(lines: List[str]) -> List[str]:
                 pm_counter += 1
 
             # match paragraph numbers with additional text and split
-            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer") and not re.match("^\w\._+", line) and ((lines[i-1] or lines[i-2] or lines[i-3]) and (lines[i-1] or lines[i-2] or lines[i-3])[-1] != ",") and not (para.strip().endswith("Ziff.") or para.strip().endswith("(U-act.") or para.strip().endswith("und") or para.strip().endswith(";") or (para and not para.strip()[-1].isdigit())):
+            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line): 
                 if re.match(absatz_pattern, line): match = re.match(absatz_pattern, line).group(0)
                 elif re.match(absatz_pattern2, line): match = re.match(absatz_pattern2, line).group(0)
                 else: match = re.match(absatz_pattern3, line).group(0)
@@ -151,7 +223,7 @@ def get_paras(lines: List[str]) -> List[str]:
     return clean_lines
 
 
-def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None, pages=None):
+def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None, pages=None, content_list=None):
     """Build an XML-tree."""
     text_node = ET.Element("text")
     text_node.attrib["id"] = filename[:-4]
@@ -198,6 +270,14 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None
 
     # body node with paragraph nodes
     # header_node = ET.SubElement(text_node, "header") # drinlassen?
+    if content_list:
+        body_content_list_node = ET.SubElement(text_node, "content_list")
+        for line in content_list:
+            node = ET.SubElement(body_content_list_node, "p")
+            if line[0][0].isdigit(): node.attrib["num"] = line[0]
+            if line[-1].isdigit(): node.attrib["page"] = line[-1]
+            for l in line:
+                if l and l[0].isalpha(): node.text = l
     body_node = ET.SubElement(text_node, "body")
     fn_ref_pattern = r"([a-z]|-|%)(\d{1,2})(\s\w|\.|\))"
     for para in filter_list:
@@ -260,8 +340,8 @@ def parse_pdftotree(filename:str) -> list[str]:
 
 
 def main():
-    for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and (filename.startswith("AI_XX_001_Gerichtsentscheide-1_1995")): # or filename.startswith("AI_XX_001_Verwaltungs--und-Ger_2009"):
+    for filename in sorted(os.listdir(PATH_TO_DATA))[40:]:
+        if filename.endswith("pdf"):
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
 
             # parse with tika library from separate script
@@ -272,8 +352,17 @@ def main():
 
             lines = split_lines(parsed_text)
 
+            # files starting from 2004 have a different layout
             if int(filename[-8:-4]) >= 2004:
-                pages = get_pages(lines)
+                if "Geschäftsbericht" in parsed_text and "Inhaltsverzeichnis" in parsed_text:
+                    content_list = get_content_list_gb(lines)
+                    pages = get_pages_gb(lines)
+                else:
+                    content_list = get_content_list(lines)
+                    pages = get_pages(lines)
+            else:
+                pages = None
+                content_list = None
 
             # footnotes = get_footnotes(lines)
             clean_text = get_paras(lines)
@@ -284,14 +373,14 @@ def main():
             else:
                 xml_filename = filename[:-4] + ".xml"
 
-            # # open json pendant
+            # open json pendant
             json_name = filename[:-3]+"json"
             if json_name in sorted(os.listdir(PATH_TO_DATA)):
                 with open(os.path.join(PATH_TO_DATA, json_name), "r", encoding="utf-8") as json_file:
                     loaded_json = json.load(json_file)  # load json
-                    tree = build_xml_tree(filename, loaded_json, clean_text)  # generates XML tree
+                    tree = build_xml_tree(filename, loaded_json, clean_text, pages=pages, content_list=content_list)  # generates XML tree
                     tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
-                    # ET.dump(tree)  # shows tree in console
+                    ET.dump(tree)  # shows tree in console
 
             # print(parsed_text)
             # print(lines)
@@ -299,7 +388,10 @@ def main():
             # for _ in footnotes:
             #     print(f"{_}\t{footnotes[_]}")
             # print(footnotes)
-            print(clean_text)
+            # print(clean_text)
+            # for _ in content_list:
+            #     print(_)
+            # print(content_list)
 
 
 
