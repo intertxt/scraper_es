@@ -120,7 +120,7 @@ def get_paras(lines: List[str]) -> List[str]:
         # match paragraph numbers with additional text and split
         elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3,
                                                                                             line)) and not re.match(
-                datum_pattern, line) and not line.endswith("Kammer"):
+                datum_pattern, line) and not line.endswith("Kammer") and not re.match("[A-Z]\._+", line):
             line = line.split(" ", 1)
             if para:
                 clean_lines.append(para.strip())
@@ -156,16 +156,18 @@ def get_paras_hg(lines: List[str]) -> List[str]:
     pm_counter = 0
     sachverhalt_counter = 0
 
+
+
     for i, line in enumerate(lines):
         line = line.strip()
         # get start of main text
         if line:
-            if "Erwägungen:" in line or "Rechtsbegehren:" in line:
+            if "Erwägung" in line or "Rechtsbegehren" in line and len(lines) > 50:
                 clean_lines.append(line.strip())
                 sachverhalt_counter += 1
                 continue
 
-            if sachverhalt_counter == 0 and line:
+            if sachverhalt_counter == 0 and line and len(lines) > 50:
                 clean_lines.append(line.strip())
 
             else:
@@ -188,7 +190,7 @@ def get_paras_hg(lines: List[str]) -> List[str]:
                 # match paragraph numbers with additional text and split
                 elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3,
                                                                                                     line)) and not re.match(
-                        datum_pattern, line) and not line.endswith("Kammer"):
+                        datum_pattern, line) and not line.endswith("Kammer") and not re.match("[A-Z]\._+", line):
                     line = line.split(" ", 1)
                     if para:
                         clean_lines.append(para.strip())
@@ -323,8 +325,8 @@ def parse_pdftotree(filename:str) -> list[str]:
 
 
 def main():
-    for filename in sorted(os.listdir(PATH_TO_DATA))[7140:]:
-        if filename.endswith("pdf") and not filename.startswith("ZH_HG_001_HG130087_2015-01-29"):
+    for filename in sorted(os.listdir(PATH_TO_DATA)):
+        if filename.endswith("pdf") and not filename.startswith("ZH_HG_001_HG130087_2015-01-29") and not filename.startswith("ZH_OG_002_SB110505_2012-04-03") and not filename.startswith("ZH_OG_002_SU120046_2012-10-26"):
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
             # parse with tika library from separate script
             # parsed_text = tika_parse(os.path.join(PATH_TO_DATA, filename))
