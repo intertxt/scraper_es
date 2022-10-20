@@ -28,22 +28,31 @@ PATH_TO_DATA = "/home/admin1/tb_tool/scraping_data/"+args.path_to_data # Gericht
 SAVE_PATH = "/home/admin1/tb_tool/clean_scraper_data/"+args.save_folder # Gerichtname_clean
 
 
-absatz_pattern = r"^(\s)?[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s"
-absatz_pattern2 = r"^(\s)?[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*(\s-\s[0-9]{1,2}\.([0-9]{1,2}(\.)?)*)?\s"
-absatz_pattern3 = r"([A-D]\.(-|\s[A-D])?(\s[a-z]\))?|\d{1,2}((\.\s)|([a-z]{1,2}\)\.?)|(\s[a-z]\)))|§.*:|[a-z]{1,2}\)(\s[a-z]{1,2}\))?|\d{1,2}\.)\s"
+absatz_pattern = r"^(((\s)?[0-9]{1,2}\.(\/)?)?((\s)?[a-z]\))+|[0-9]{1,2}\.(\/)?([0-9]{1,2}(\.)?)*)\s"
+absatz_pattern2 = r"^[0-9]{1,2}\.(\/)?([0-9]{1,2}(\.)?)*\s"
+absatz_pattern3 = r"^((\s)?[A-Z]\.(\/)?|[IVD]{1,4}\.)\s"
+# absatz_pattern3 = r"^((\s)?[A-Z]\.(\/)?((\s)?[a-z])*|[IVD]{1,4}\.)\s"
 datum_pattern = r"[0-9][0-9]?\.(\s?(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)|([0-9]{2}\.))"
 false_marks = []
 
 def split_lines(parsed_text: str) -> List[str]:
-    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "").replace("________________________________________________________________________________________", "") for line in parsed_text.split("\n")]
+    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "").replace("\xa0\xa0\xa0\xa0\xa0\xa0", "").replace("\xa0", "") for line in parsed_text.split("\n")]
     return split_lines
 
 
-def get_pages(lines: List[str]) -> str:
-    pages = [lines.pop(lines.index(line))for line in lines if line.isdigit()]
+def get_pages(lines: List[str]) -> str | None:
+    page_pattern = r"Seite\s*\d{1,3}\s*\—\s*\d{1,3}\s*"
+    pages = [lines.pop(lines.index(line)).split()[1] for line in lines if re.fullmatch(page_pattern, line)]
+    if not pages:
+        pages = [lines.pop(lines.index(line)).split(" / ")[0] for line in lines if re.fullmatch(r"\d{1,3}\s\/\s\d{1,3}", line)]
+        if not pages:
+            pages = []
+            for line in lines:
+                if line.isdigit() and (len(pages) == 0 or int(line.strip()) > int(pages[-1])):
+                    pages.append(lines.pop(lines.index(line)).strip())
     if pages:
         if pages[0] == "2": pages[0] = "1"
-        return f"{pages[0]}–{pages[-2]}"
+        return f"{pages[0]}–{pages[-1]}"
     else:
         return ""
 
@@ -86,35 +95,38 @@ def get_paras(lines: List[str]) -> List[str]:
     clean_lines = []
     para = ""
     pm_counter = 0
-    sachverhalt_counter = 0
+    sachverhalt_counter = 1
     headnote_counter = 0
+    headnotes = r"PKG\s\d{4}"
 
     for i, line in enumerate(lines):
         line = line.strip()
-        if line == "Kantonsgericht KC" or line == "Tribunal cantonal KG":
-            headnote_counter += 1
-            if headnote_counter > 1:
-                continue
 
-        # get start of main text 
-        if "fait" in line or "f a i t" in line or "attendu" in line or "in Anbetracht dessen," in line or "Sachverhalt" in line or "considérant" in line:
-            clean_lines.append(line.strip())
-            sachverhalt_counter += 1
-            continue
-
+        # # get start of main text
+        # if  ("nachdem sich ergeben" in line or "Sachverhalt" in line):
+        #     clean_lines.append(line.strip())
+        #     sachverhalt_counter += 1
+        #     continue
+        
         if sachverhalt_counter == 0 and line:
             clean_lines.append(line.strip())
 
         else:
-            # get footnote reference in text
-            if line and line[0].isdigit() and line[-1].isdigit() and lines[i - 1]:
-                if para:
-                    clean_lines.append(para.strip())
-                    para = ""
-                clean_lines.append(line)
+            # # get footnote reference in text
+            # if line and line[0].isdigit() and line[-1].isdigit() and lines[i - 1]:
+            #     if para:
+            #         clean_lines.append(para.strip())
+            #         para = ""
+            #     clean_lines.append(line)
+            if re.fullmatch(headnotes, line):
+                if headnote_counter == 0:
+                    clean_lines.append(line.strip())
+                    headnote_counter += 1
+                else:
+                    continue
 
             # match pure paragraph numbers
-            elif (re.fullmatch(absatz_pattern, line) or re.fullmatch(absatz_pattern2, line) or re.fullmatch(absatz_pattern3, line)) and not re.fullmatch(datum_pattern, line):
+            elif (re.fullmatch(absatz_pattern[:-2], line) or re.fullmatch(absatz_pattern2[:-2], line) or re.fullmatch(absatz_pattern3[:-2], line)) and not re.fullmatch(datum_pattern, line) and not re.match("^\w\._+", line):
                 if para:
                     clean_lines.append(para.strip())
                     para = ""
@@ -122,14 +134,17 @@ def get_paras(lines: List[str]) -> List[str]:
                 pm_counter += 1
 
             # match paragraph numbers with additional text and split
-            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer"):
-                line = line.split(" ", 1)
+            elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line):
+                if re.match(absatz_pattern, line): match = re.match(absatz_pattern, line).group(0)
+                elif re.match(absatz_pattern2, line): match = re.match(absatz_pattern2, line).group(0)
+                else: match = re.match(absatz_pattern3, line).group(0)
+                # line = line.split(" ", 1)
                 if para:
                     clean_lines.append(para.strip())
                     para = ""
-                clean_lines.append(line[0])
-                if len(line) > 1:
-                    para += line[1][:-1] if re.match(r".*\w+-$", line[1]) else line[1]+" "
+                clean_lines.append(match.strip())
+                # if len(line) > 1:
+                para += line[len(match):] if re.match(r".*\w+-$", line[1]) else line[len(match):]+" "
                 pm_counter += 1
 
             # remove links which are not visible in pdf
@@ -146,7 +161,7 @@ def get_paras(lines: List[str]) -> List[str]:
     # if para is not an empty string it is appended to the clean_lines list
     if para:
         clean_lines.append(para.strip())
-        para = "" 
+        para = ""
 
     return clean_lines
 
@@ -159,17 +174,20 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None
     if "Kopfzeile" in loaded_json.keys():
         text_node.attrib["title"] = loaded_json["Kopfzeile"][0]["Text"].strip()
         text_node.attrib["source"] = "https://entscheidsuche.ch"
-    text_node.attrib["page"] = pages
+    if pages:
+        text_node.attrib["page"] = pages
+    else:
+        text_node.attrib["page"] = ""
     if "Meta" in loaded_json.keys():
         text_node.attrib["topics"] = loaded_json["Meta"][0]["Text"][:-1]
     else:
         text_node.attrib["topics"] = ""
     text_node.attrib["subtopics"] = ""
-    text_node.attrib["language"] = detect(" ".join(filter_list))
+    text_node.attrib["language"] = detect(" ".join(filter_list)) if detect(" ".join(filter_list)) in ["de", "it"] else "it"
     if filename.endswith("nodate.html"):
         text_node.attrib["date"] = "0000-00-00"
     else:
-        text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
+        text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ') if not "0000-00-00" in loaded_json["Datum"] else filename.split("-")[1][:4]+"-00-00"
     if "Abstract" in loaded_json.keys():
         text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"]
     else:
@@ -180,14 +198,14 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None
         text_node.attrib["year"] = "0000"
     else:
         if "-" in loaded_json["Datum"]:
-            text_node.attrib["year"] = loaded_json["Datum"][:4]
+            text_node.attrib["year"] = loaded_json["Datum"][:4] if not "0000-00-00" in loaded_json["Datum"] else filename.split("-")[1][:4]+"-00-00"
         else:
-            text_node.attrib["year"] = loaded_json["Datum"][-4:]
+            text_node.attrib["year"] = loaded_json["Datum"][-4:] if not "0000-00-00" in loaded_json["Datum"] else filename.split("-")[1][:4]+"-00-00"
     if filename.endswith("nodate.html"):
         text_node.attrib["decade"] = "0000-00-00"
     else:
         if "-" in loaded_json["Datum"]:
-            text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
+            text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0" if not "0000-00-00" in loaded_json["Datum"] else filename.split("-")[1][:3]+"0"
         else:
             text_node.attrib["decade"] = loaded_json["Datum"][-4:-1] + "0"
     if "HTML" in loaded_json.keys():
@@ -220,7 +238,7 @@ def build_xml_tree(filename: str, loaded_json, filter_list: List, footnotes=None
         #             fn_node.text = f"{num}, {fn}"
         #             break
         #     continue
-        elif re.fullmatch(absatz_pattern3, para) or re.fullmatch(absatz_pattern2, para) or re.fullmatch(absatz_pattern, para):
+        elif re.fullmatch(absatz_pattern3[:-2], para) or re.fullmatch(absatz_pattern2[:-2], para) or re.fullmatch(absatz_pattern[:-2], para):
             p_node.attrib["type"] = "paragraph_mark"
         elif para.startswith("<table"):
             p_node.attrib["type"] = "table"
@@ -257,8 +275,8 @@ def parse_pdftotree(filename:str) -> list[str]:
 
 
 def main():
-    for filename in sorted(os.listdir(PATH_TO_DATA))[:2]:
-        if filename.endswith("pdf"):
+    for filename in sorted(os.listdir(PATH_TO_DATA)):
+        if filename.endswith("pdf"): # and (filename.startswith("SZ_KG_001_ZK1-2011-34_2012-06-12") or filename.startswith("SZ_KG_002_ZK2-2020-84_2021-03-03") or filename.startswith("SZ_KG_003_STK-2013-22_2013-09-03") or filename.startswith("SZ_KG_004_BEK-2014-210_2015-01-29") or filename.startswith("SZ_KG_999_GPR-2017-12_2017-12-13")):
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
 
             # parse with tika library from separate script
@@ -268,28 +286,33 @@ def main():
             # lines = parse_pdftotree(filename)
 
             lines = split_lines(parsed_text)
-            pages = get_pages(lines)  ### stopped here for first layout PKG
-            # footnotes = get_footnotes(lines)
-            # clean_text = get_paras(lines)
-            #
-            # # create new filenames for the xml files
-            # if filename.endswith("nodate.html"):
-            #     xml_filename = filename.replace("nodate.html", "0000-00-00.xml")
-            # else:
-            #     xml_filename = filename[:-4] + ".xml"
-            #
-            # # open json pendant
-            # json_name = filename[:-3]+"json"
-            # if json_name in sorted(os.listdir(PATH_TO_DATA)):
-            #     with open(os.path.join(PATH_TO_DATA, json_name), "r", encoding="utf-8") as json_file:
-            #         loaded_json = json.load(json_file)  # load json
-            #         tree = build_xml_tree(filename, loaded_json, clean_text, pages=pages)  # generates XML tree
-            #         tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
-            #         ET.dump(tree)  # shows tree in console
+
+            pages = get_pages(lines)
+            missing_pages = []
+            
+            if not pages:
+                missing_pages.append(filename)
+            # # footnotes = get_footnotes(lines)
+            clean_text = get_paras(lines)
+
+            # create new filenames for the xml files
+            if filename.endswith("0000-00-00.pdf"):
+                xml_filename = filename.replace("0000-00-00.pdf", filename.split("-")[1][:4]+"-00-00.xml")
+            else:
+                xml_filename = filename[:-4] + ".xml"
+
+            # open json pendant
+            json_name = filename[:-3]+"json"
+            if json_name in sorted(os.listdir(PATH_TO_DATA)):
+                with open(os.path.join(PATH_TO_DATA, json_name), "r", encoding="utf-8") as json_file:
+                    loaded_json = json.load(json_file)  # load json
+                    tree = build_xml_tree(filename, loaded_json, clean_text)  # generates XML tree
+                    tree.write(os.path.join(SAVE_PATH, xml_filename), encoding="UTF-8", xml_declaration=True)  # writes tree to file
+                    ET.dump(tree)  # shows tree in console
 
             # print(parsed_text)
-            print(lines)
-            print(pages)
+            # print(lines)
+            # print(pages)
             # for _ in footnotes:
             #     print(f"{_}\t{footnotes[_]}")
             # print(footnotes)
@@ -298,7 +321,7 @@ def main():
 
 
             print("\n===========================================================\n\n")
-
+    print(missing_pages)
 
 if __name__ == "__main__":
     main()

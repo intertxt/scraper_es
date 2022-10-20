@@ -267,7 +267,7 @@ def main():
     footnotes = None
     pages = None
     for filename in sorted(os.listdir(PATH_TO_DATA)):
-        if filename.endswith("pdf") and "JAAC" in filename: # filename.startswith("CH_VB_001_-006_1983-03-14") and not "---" in filename:
+        if filename.endswith("pdf") and not "JAAC" in filename and int(filename[-14:-10]) >= 2000 and not r"--" in filename and "metadata" not in filename: # filename.startswith("CH_VB_001_-006_1983-03-14") and not "---" in filename:
             print(f"The following file is being processed:\n{os.path.join(PATH_TO_DATA, filename)}\n")
 
             # parse with tika library from separate script
