@@ -192,11 +192,11 @@ def build_xml_tree(filename, loaded_json, pages, filter_list, full_save_name, ye
 
 def iterate_files(directory, filetype):
 	files = ["CH_BGE_002_BGE-109-Ia-248_", "CH_BGE_007_BGE-126-V-193_"]
-	duplicates = get_duplicates(directory) # from the nodate_duplicate_counter.py file
+	# duplicates = get_duplicates(directory) # from the nodate_duplicate_counter.py file
 	# with open("nodates.txt", "r", encoding="utf-8") as nodate_filenames:
 	# 	nodate_name_list = [line[2:-14]+"nodate.html" for line in nodate_filenames.read().split("\n")]
 	for filename in sorted(os.listdir(directory)):
-		#if filename.endswith(filetype) and "nodate" in filename and filename.strip("nodate.html") in files:
+		if filename.endswith(filetype): #and "nodate" in filename and filename.strip("nodate.html") in files:
 			fname = os.path.join(directory, filename)
 			fname_json = os.path.join(directory, filename[:-5] + ".json")
 			print("Current file name: ", os.path.abspath(fname))
