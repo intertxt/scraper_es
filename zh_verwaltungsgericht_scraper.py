@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 # scraper for ZH_Verwaltungsgericht
 
+# use in CLI with the following prompt:
+# python3.6 zh_verwaltungsgericht_scraper.py -p /home/admin1/tb_tool/scraping_data/
+
 from bs4 import BeautifulSoup, Comment, Doctype
 import os
 import argparse
@@ -12,6 +15,7 @@ import re
 import unicodedata, itertools, sys
 from duplicate_checker import get_duplicates, check_pendants
 from helperscript import get_files_wo_pendant
+from html import unescape
 
 
 parser = argparse.ArgumentParser(description="generate clean XML-files from HTML-files")
@@ -163,7 +167,14 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
     if filename.endswith("nodate.html"):
         text_node.attrib["date"] = "0000-00-00"
     else:
-        text_node.attrib["date"] = loaded_json["Datum"].replace('  ', ' ')
+        date = loaded_json["Datum"].replace('  ', ' ').replace(".", "-")
+        date_list = date.split("-")
+        if len(date_list[0]) < 4:
+            date = "-".join([date_list[-1], date_list[1], date_list[0]])
+            text_node.attrib["date"] = date
+        else:
+            date = loaded_json["Datum"].replace('  ', ' ')
+            text_node.attrib["date"] = date
     if "Abstract" in loaded_json.keys():
         text_node.attrib["description"] = loaded_json["Abstract"][0]["Text"]
     else:
@@ -181,7 +192,7 @@ def build_xml_tree(filename, loaded_json, filter_list, full_save_name):
         text_node.attrib["decade"] = "0000-00-00"
     else:
         if loaded_json["Datum"][2] in str(range(10)):
-            text_node.attrib["decade"] = loaded_json["Datum"][:3] + "0"
+            text_node.attrib["decade"] = date[:3] + "0"
         else:
             text_node.attrib["decade"] = loaded_json["Datum"][-4:-1] + "0"
     if "HTML" in loaded_json.keys():
@@ -236,7 +247,13 @@ def build_xml_wo_json(filename, metadata, filter_list, full_save_name):
         text_node.attrib["topics"] = topics[0].text
     text_node.attrib["subtopics"] = ", ".join([topic.text[0]+topic.text[1:].lower() for topic in topics[1:]])
     text_node.attrib["language"] = "de"
-    text_node.attrib["date"] = filename[-15:-5].replace("-", ".")
+    date = filename[-15:-5].replace("_", "-")
+    date_list = date.split("-")
+    if len(date_list[0]) < 4:
+        date = [date_list[-1], date_list[1], date_list[0]]
+        date = "-".join(date)
+
+    text_node.attrib["date"] = date
     # for url
     aa = meta.findAll(["a"])
     for a in aa:
@@ -246,14 +263,17 @@ def build_xml_wo_json(filename, metadata, filter_list, full_save_name):
     text_node.attrib["description"] = description
     text_node.attrib["type"] = filename[:9]
     text_node.attrib["file"] = filename
-    text_node.attrib["year"] = text_node.attrib["date"][-4:]
+    text_node.attrib["year"] = date[:4]
+    print(date[:4])
     if filename.endswith("nodate.html"):
         text_node.attrib["decade"] = "0000-00-00"
     else:
         if text_node.attrib["date"][2] in str(range(10)):
-            text_node.attrib["decade"] = text_node.attrib["date"][:3] + "0"
+            text_node.attrib["decade"] = date[:3] + "0"
+            print(date[:3] + "0")
         else:
-            text_node.attrib["decade"] = text_node.attrib["date"][-4:-1] + "0"
+            text_node.attrib["decade"] = date[:3] + "0"
+            print(date[:3] + "0")
     text_node.attrib["url"] = url
     body_node = ET.SubElement(text_node, "body")
     for para in filter_list:
@@ -270,7 +290,7 @@ def build_xml_wo_json(filename, metadata, filter_list, full_save_name):
             p_node.attrib["type"] = "table"
         else:
             p_node.attrib["type"] = "plain_text"
-        p_node.text = para
+        p_node.text = unescape(para.strip())
     tree = ET.ElementTree(text_node) # creating the tree
     return tree
 
@@ -279,8 +299,8 @@ def iterate_files(directory, filetype):
     files_wo_pendants = get_files_wo_pendant(directory)
     for filename in sorted(os.listdir(directory)):
         # because 16 files (names of which are in this list) don't have a json-pendant:
-        if filename[:-5] in files_wo_pendants:
-        # if filename.endswith(filetype) and filename[:-5] not in files_wo_pendants:# and filename not in duplicate_list: # for files with json-pendant
+        # if filename[:-5] in files_wo_pendants:
+        if filename.endswith(filetype): # and filename[:-5] not in files_wo_pendants:# and filename not in duplicate_list: # for files with json-pendant
             fname = os.path.join(directory, filename)
             fname_json = os.path.join(directory, filename[:-5] + ".json")
             if filename.endswith("nodate.html"):
@@ -307,11 +327,13 @@ def iterate_files(directory, filetype):
                 filter_list = list(filter(lambda x: x != None, filter_list)) # removes elements of type None
                 filter_list = list(filter(lambda x: x != "-", filter_list))  # removes - elements
                 # print(filter_list)
-                # with open(fname_json, "r", encoding="utf-8") as json_file:
-                #     loaded_json = json.load(json_file)  # load json
-                #     tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
+                if filename[:-5] not in files_wo_pendants:
+                    with open(fname_json, "r", encoding="utf-8") as json_file:
+                        loaded_json = json.load(json_file)  # load json
+                        tree = build_xml_tree(filename, loaded_json, filter_list, full_save_name) # generates XML tree
+                else:
                 # because 16 files (names of which are in this list) don't have a json-pendant the following is alternative code:
-                tree = build_xml_wo_json(filename, metadata, filter_list, full_save_name)
+                    tree = build_xml_wo_json(filename, metadata, filter_list, full_save_name)
                 tree.write(full_save_name, encoding="UTF-8", xml_declaration=True)  # writes tree to file
                 ET.dump(tree) # shows tree in console
                 print("\n\n")
