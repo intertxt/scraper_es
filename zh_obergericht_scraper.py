@@ -265,7 +265,11 @@ def get_paras_hg(lines: List[str]) -> List[str]:
                 continue
 
             if sachverhalt_counter == 0 and line and len(lines) > 50:
-                clean_lines.append(line.strip())
+                if len(line) == 1:
+                    clean_lines.append(line + lines[i + 1])
+                    del lines[i + 1]
+                else:
+                    clean_lines.append(line.strip())
 
             else:
                 # get footnote reference in text
