@@ -14,6 +14,7 @@ import pdftotree
 import re
 from typing import List, Tuple
 import json
+from html import unescape
 
 
 arg_parser = argparse.ArgumentParser(description="extract Text from PDF-files")
@@ -34,7 +35,7 @@ datum_pattern = r"[0-9][0-9]?\.(\s?([A-Z][a-z]+|März)|([0-9]{2}\.))"
 false_marks = []
 
 def split_lines(parsed_text: str) -> List[str]:
-    split_lines = [line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "") for line in parsed_text.split("\n")]
+    split_lines = [unescape(line.strip().replace("     ", " ").replace("\uf02d", "").replace(" ", "")) for line in parsed_text.split("\n")]
     return split_lines
 
 
@@ -84,7 +85,7 @@ def get_paras(lines: List[str]) -> List[str]:
             pm_counter += 1
 
         # match paragraph numbers with additional text and split
-        elif (re.match(absatz_pattern, line) or re.match(absatz_pattern2, line) or re.match(absatz_pattern3, line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer"):
+        elif (re.match(absatz_pattern+"\s", line) or re.match(absatz_pattern2+"\s", line) or re.match(absatz_pattern3+"\s", line)) and not re.match(datum_pattern, line) and not line.endswith("Kammer"):
             line = line.split(" ", 1)
             if para:
                 clean_lines.append(para.strip())
