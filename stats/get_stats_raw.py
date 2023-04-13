@@ -1,0 +1,111 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Getting the most important statistics for each new raw file.
+
+
+# Use this command in your shell:
+# python3.8 get_stats_raw.py [-args]
+
+# start of last crawl was 2023-04-05 (YYYY-MM-DD)
+
+
+# Import necessary modules.
+import xml.etree.ElementTree as ET
+import os
+import argparse
+import pandas as pd
+from typing import List
+import datetime
+import warnings
+
+
+parser = argparse.ArgumentParser(description="extract the earliest and lates filedate out of folder")
+parser.add_argument("-p", "--path_to_data", type=str, help="directory that contains folders")
+parser.add_argument("-pf", "--path_to_files", type=str, help="directory that contains files directly")
+parser.add_argument("-dd", "--crawl_date", type=str, help="only files that were crawled from this date onwards are considered. use the following format: YYYY-MM-DD")
+parser.add_argument("-out", "--output_format", type=str, help="choose output format between 'csv' and 'pickle'")
+
+args = parser.parse_args()
+
+
+
+def get_date(file):
+    file_date = file.strip(".pdfhtml").split("_")[-1]
+    if not file_date == "nodate" and len(file_date.split("-")) == 3:
+        date_nr = file_date.split("-")
+        e_date = datetime.date(int(date_nr[0]), int(date_nr[1]), int(date_nr[2]))
+    elif len(file_date.split("-")) != 3:
+        e_date = file_date
+    else:
+        e_date = datetime.date(1800, 1, 1)
+    return e_date
+
+
+def main():
+    d = {"folder": [],
+         "filename": [],
+         "crawl_date": [],
+         "entscheid_date": [],
+         "canton": [],
+         "size": []}
+
+    crawl_date_list = [int(_) for _ in args.crawl_date.split("-")]
+    crawl_date = datetime.date(crawl_date_list[0], crawl_date_list[1], crawl_date_list[2])
+    os.chdir("/")
+
+    if args.path_to_files:
+        folder = args.path_to_files
+        print(f"Current folder:\t{folder}")
+        for file in sorted(os.listdir(folder))[:20]:
+            stat = os.stat(os.path.join(folder, file))
+            time_stamp = stat.st_ctime
+            date = datetime.date.fromtimestamp(time_stamp)
+            if date >= crawl_date:
+                if not file.endswith("json"):
+                    datatype = file.split(".")[1] # usually either pdf or html
+                    e_date = get_date(file)
+                    level = "CH" if file.startswith("CH") else file.split("_")[0]
+                    size = stat.st_size
+                    d["folder"].append(folder.split("/")[-1])
+                    d["filename"].append(file)
+                    d["crawl_date"].append(date)
+                    d["entscheid_date"].append(e_date)
+                    d["canton"].append(level)
+                    d["size"].append(size)
+
+    elif args.path_to_data:
+        for folder in os.listdir(args.path_to_data):
+            folder = os.path.join(args.path_to_data, folder)
+            print(f"Current folder:\t{folder}")
+            for file in sorted(os.listdir(folder))[:20]:
+                stat = os.stat(os.path.join(folder, file))
+                time_stamp = stat.st_ctime
+                date = datetime.date.fromtimestamp(time_stamp)
+                if date >= crawl_date:
+                    if not file.endswith("json"):
+                        datatype = file.split(".")[1]  # usually either pdf or html
+                        e_date = get_date(file)
+                        level = "CH" if file.startswith("CH") else file.split("_")[0]
+                        size = stat.st_size
+                        d["folder"].append(folder.split("/")[-1])
+                        d["filename"].append(file)
+                        d["crawl_date"].append(date)
+                        d["entscheid_date"].append(e_date)
+                        d["canton"].append(level)
+                        d["size"].append(size)
+
+    else:
+        raise Warning("Please enter a path to a folder.")
+
+    df = pd.DataFrame.from_dict(d)
+
+    if args.output_format == "csv": # for csv
+        with open("/usr/local/zhaw/app/sur/scraper_kantone/stats/new_raw_stats.pickle", "w", encoding="utf-8") as f:
+            df.to_csv(f, index=False)
+
+    elif args.output_format == "pickle": # for pickle
+        df.to_pickle("/usr/local/zhaw/app/sur/scraper_kantone/stats/new_raw_stats.pickle")
+
+
+if __name__ == "__main__":
+    main()
