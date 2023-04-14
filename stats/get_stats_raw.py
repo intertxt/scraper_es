@@ -49,7 +49,7 @@ def main():
          "canton": [],
          "size": []}
 
-    crawl_date_list = [int(_) for _ in args.crawl_date.split("-")]
+    crawl_date_list = [int(_) for _ in args.crawl_date.split("-")] if args.crawl_date else [1900, 1, 1]
     crawl_date = datetime.date(crawl_date_list[0], crawl_date_list[1], crawl_date_list[2])
     os.chdir("/")
 
@@ -105,6 +105,8 @@ def main():
 
     elif args.output_format == "pickle": # for pickle
         df.to_pickle("/usr/local/zhaw/app/sur/scraper_kantone/stats/new_raw_stats.pickle")
+
+    else: raise Warning("Please enter an output format.")
 
 
 if __name__ == "__main__":
