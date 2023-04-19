@@ -59,7 +59,7 @@ def findLinks(url, path, c):
         elif isDirectory(link["href"]):  # falls es ein directory ist wird es neu aufgerufen (rekursiv)
             if len(link["href"]) != 1 and link["href"] != "/docs/":
                 newUrl = url + link["href"].lstrip("/docs")
-                findLinks(newUrl, path)
+                findLinks(newUrl, path, c)
 
         else:
             if link["href"].endswith(".json") or link["href"].endswith(".html") or link["href"].endswith(".pdf"):
