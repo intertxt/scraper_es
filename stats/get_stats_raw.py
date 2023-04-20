@@ -97,7 +97,6 @@ def main():
                         d["size"].append(size)
                         d["datatype"].append(datatype)
 
-
     else:
         raise Warning("Please enter a path to a folder.")
 
