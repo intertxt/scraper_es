@@ -41,6 +41,24 @@ def get_date(file):
     return e_date
 
 
+def get_stats_for_new_files(d, stat, crawl_date, file, folder):
+    time_stamp = stat.st_ctime
+    date = datetime.date.fromtimestamp(time_stamp)
+    if date >= crawl_date:
+        if not file.endswith("json"):
+            datatype = file.split(".")[1]  # usually either pdf or html
+            e_date = get_date(file)
+            level = "CH" if file.startswith("CH") else file.split("_")[0]
+            size = stat.st_size
+            d["folder"].append(folder.split("/")[-1])
+            d["filename"].append(file)
+            d["crawl_date"].append(date)
+            d["entscheid_date"].append(e_date)
+            d["canton"].append(level)
+            d["size"].append(size)
+            d["datatype"].append(datatype)
+
+
 def main():
     d = {"folder": [],
          "filename": [],
@@ -55,6 +73,7 @@ def main():
     os.chdir("/")
 
     if args.path_to_files:
+        # TODO: debug this there should be more than 110 files
         folder = args.path_to_files
         print(f"Current folder:\t{folder}")
         for file in sorted(os.listdir(folder))[:20]:
@@ -76,6 +95,7 @@ def main():
                     d["datatype"].append(datatype)
 
     elif args.path_to_data:
+        # TODO: debug this there should be more than 110 files
         for folder in os.listdir(args.path_to_data):
             folder = os.path.join(args.path_to_data, folder)
             print(f"Current folder:\t{folder}")
@@ -105,7 +125,7 @@ def main():
     today = datetime.date.today()
 
     if args.output_format == "csv":  # for csv
-        with open(f"/usr/local/zhaw/app/sur/scraper_kantone/stats/data/{today}_new_raw_stats.pickle", "w", encoding="utf-8") as f:
+        with open(f"/usr/local/zhaw/app/sur/scraper_kantone/stats/data/{today}_new_raw_stats.csv", "w", encoding="utf-8") as f:
             df.to_csv(f, index=False)
 
     elif args.output_format == "pickle":  # for pickle
