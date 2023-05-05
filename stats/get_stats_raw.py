@@ -30,10 +30,10 @@ args = parser.parse_args()
 
 def get_date(file):
     file_date = file.strip(".pdfhtml").split("_")[-1]
-    if len(file_date.split("-")) == 3 and len(file_date.split("-")[0]) == 4 and not file_date == "nodate":
+    if len(file_date.split("-")) == 3 and len(file_date.split("-")[0]) == 4 and not file_date == "nodate" and "0000" not in file_date:
         date_nr = file_date.split("-")
         e_date = datetime.date(int(date_nr[0]), int(date_nr[1]), int(date_nr[2]))
-    elif len(file_date.split("-")) == 3 and len(file_date.split("-")[0]) != 4 and not file_date == "nodate":
+    elif len(file_date.split("-")) == 3 and len(file_date.split("-")[0]) != 4 and not file_date == "nodate" and "0000" not in file_date:
         date_nr = file_date.split("-")
         e_date = datetime.date(int(date_nr[2]), int(date_nr[1]), int(date_nr[0]))
     else:
@@ -73,10 +73,10 @@ def main():
     os.chdir("/")
 
     if args.path_to_files:
-        # TODO: debug this there should be more than 110 files
         folder = args.path_to_files
         print(f"Current folder:\t{folder}")
-        for file in sorted(os.listdir(folder))[:20]:
+        for file in sorted(os.listdir(folder)):
+            print(file)
             stat = os.stat(os.path.join(folder, file))
             time_stamp = stat.st_ctime
             date = datetime.date.fromtimestamp(time_stamp)
@@ -95,11 +95,11 @@ def main():
                     d["datatype"].append(datatype)
 
     elif args.path_to_data:
-        # TODO: debug this there should be more than 110 files
         for folder in os.listdir(args.path_to_data):
             folder = os.path.join(args.path_to_data, folder)
             print(f"Current folder:\t{folder}")
-            for file in sorted(os.listdir(folder))[:20]:
+            for file in sorted(os.listdir(folder)):
+                print(file)
                 stat = os.stat(os.path.join(folder, file))
                 time_stamp = stat.st_ctime
                 date = datetime.date.fromtimestamp(time_stamp)
@@ -121,6 +121,8 @@ def main():
         raise Warning("Please enter a path to a folder.")
 
     df = pd.DataFrame.from_dict(d)
+
+    print(len(df))
 
     today = datetime.date.today()
 
